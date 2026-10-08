@@ -47,6 +47,7 @@ import {
   type VerificationResponse,
   type VerificationResult,
 } from './lib/api'
+import PublicUpiCheck from './components/PublicUpiCheck'
 
 type NavItem = { label: string; icon: typeof LayoutDashboard }
 type Risk = 'Low' | 'Medium' | 'High'
@@ -97,6 +98,7 @@ function App() {
   const [showNewTxModal, setShowNewTxModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showNewOwnerModal, setShowNewOwnerModal] = useState(false)
+  const [showPublicCheck, setShowPublicCheck] = useState(false)
 
   const loadCurrentUserAndStats = async () => {
     try {
@@ -125,6 +127,9 @@ function App() {
   }
 
   if (!authenticated) {
+    if (showPublicCheck) {
+      return <PublicUpiCheck onBack={() => setShowPublicCheck(false)} />
+    }
     return (
       <LoginScreen
         onContinue={(user) => {
@@ -132,6 +137,7 @@ function App() {
           setCurrentUser(user)
           setAuthenticated(true)
         }}
+        onPublicCheck={() => setShowPublicCheck(true)}
       />
     )
   }
@@ -357,7 +363,7 @@ function App() {
 /* =========================================================================
    LOGIN SCREEN
    ========================================================================= */
-function LoginScreen({ onContinue }: { onContinue: (user: CurrentUser) => void }) {
+function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: CurrentUser) => void; onPublicCheck: () => void }) {
   const [email, setEmail] = useState('officer@landguard.local')
   const [password, setPassword] = useState('OfficerPass123!')
   const [role, setRole] = useState('Officer')
@@ -394,14 +400,21 @@ function LoginScreen({ onContinue }: { onContinue: (user: CurrentUser) => void }
     }
   }
 
-  const enterDemo = () => {
-    onContinue({
-      id: 2,
-      full_name: 'Marie Habyarimana',
-      email: 'officer@landguard.local',
-      is_active: true,
-      roles: ['OFFICER'],
-    })
+  const enterDemo = async () => {
+    try {
+      const loginResp = await api.login('officer@landguard.local', 'OfficerPass123!', 'OFFICER')
+      localStorage.setItem('landguard_access_token', loginResp.access_token)
+      const user = await api.me()
+      onContinue(user)
+    } catch {
+      onContinue({
+        id: 2,
+        full_name: 'Marie Habyarimana',
+        email: 'officer@landguard.local',
+        is_active: true,
+        roles: ['OFFICER'],
+      })
+    }
   }
 
   return (
@@ -462,6 +475,13 @@ function LoginScreen({ onContinue }: { onContinue: (user: CurrentUser) => void }
 
         <button className="demo-button" onClick={enterDemo}>
           Launch Offline Demo Mode
+        </button>
+
+        <button
+          onClick={onPublicCheck}
+          style={{ marginTop: '10px', padding: '10px 20px', background: 'transparent', border: '1px solid #303731', borderRadius: '6px', color: '#a0a0a0', cursor: 'pointer', fontSize: '13px', width: '100%' }}
+        >
+          Public UPI Check (No Login Required)
         </button>
 
         <p className="login-note">
@@ -1401,8 +1421,9 @@ function CaseReviewModal({
       await api.updateCase(caseId, { status, review_notes: notes })
       setFeedback('Review notes and case status updated successfully. Recorded in audit log.')
       onUpdated()
-    } catch {
-      setFeedback('Review updated locally (Demo mode).')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update case'
+      setFeedback(`Error: ${msg}. Please ensure you are logged in.`)
     } finally {
       setSaving(false)
     }

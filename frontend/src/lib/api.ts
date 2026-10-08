@@ -48,6 +48,7 @@ export const api = {
   updateCase: (id: number, payload: object) => request<CaseRecord>(`/api/cases/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   audit: () => request<AuditRecord[]>('/api/audit-logs'),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
+  publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
 }
 
 export type DashboardStats = {
@@ -142,4 +143,15 @@ export type AuditRecord = {
   action: string
   entity: string
   entity_id?: string | null
+}
+
+export type PublicParcelOut = {
+  upi: string
+  parcel_code: string
+  location: string
+  district: string
+  status: string
+  has_pending_transaction: boolean
+  warning_message: string | null
+  public_notice: string
 }
