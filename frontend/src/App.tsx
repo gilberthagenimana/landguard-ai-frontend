@@ -48,6 +48,9 @@ import {
   type VerificationResult,
 } from './lib/api'
 import PublicUpiCheck from './components/PublicUpiCheck'
+import AdminDashboard from './components/AdminDashboard'
+import OfficerDashboard from './components/OfficerDashboard'
+import AuditorDashboard from './components/AuditorDashboard'
 
 type NavItem = { label: string; icon: typeof LayoutDashboard }
 type Risk = 'Low' | 'Medium' | 'High'
@@ -99,6 +102,7 @@ function App() {
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showNewOwnerModal, setShowNewOwnerModal] = useState(false)
   const [showPublicCheck, setShowPublicCheck] = useState(false)
+  const [ownersRefreshKey, setOwnersRefreshKey] = useState(0)
 
   const loadCurrentUserAndStats = async () => {
     try {
@@ -254,16 +258,29 @@ function App() {
 
         <div className="content-wrap">
           {activeNav === 'Dashboard' && (
-            <DashboardView
-              stats={displayStats}
-              apiState={apiState}
-              currentUser={currentUser}
-              alertFilter={alertFilter}
-              setAlertFilter={setAlertFilter}
-              onNavigate={(page) => setActiveNav(page)}
-              onSelectCase={(id) => setSelectedCaseId(id)}
-              onRefresh={loadCurrentUserAndStats}
-            />
+            <>
+              {role === 'ADMIN' && (
+                <AdminDashboard stats={displayStats} currentUser={currentUser} />
+              )}
+              {role === 'OFFICER' && (
+                <OfficerDashboard stats={displayStats} onNavigate={(page) => setActiveNav(page)} />
+              )}
+              {role === 'AUDITOR' && (
+                <AuditorDashboard stats={displayStats} onNavigate={(page) => setActiveNav(page)} />
+              )}
+              {!['ADMIN', 'OFFICER', 'AUDITOR'].includes(role) && (
+                <DashboardView
+                  stats={displayStats}
+                  apiState={apiState}
+                  currentUser={currentUser}
+                  alertFilter={alertFilter}
+                  setAlertFilter={setAlertFilter}
+                  onNavigate={(page) => setActiveNav(page)}
+                  onSelectCase={(id) => setSelectedCaseId(id)}
+                  onRefresh={loadCurrentUserAndStats}
+                />
+              )}
+            </>
           )}
 
           {activeNav === 'Parcels' && (
@@ -274,7 +291,10 @@ function App() {
           )}
 
           {activeNav === 'Owners' && (
-            <OwnersView onNewOwner={() => setShowNewOwnerModal(true)} />
+            <OwnersView
+              onNewOwner={() => setShowNewOwnerModal(true)}
+              refreshKey={ownersRefreshKey}
+            />
           )}
 
           {activeNav === 'Transactions' && (
@@ -343,6 +363,7 @@ function App() {
           onClose={() => setShowNewOwnerModal(false)}
           onCreated={() => {
             setShowNewOwnerModal(false)
+            setOwnersRefreshKey(prev => prev + 1)
             loadCurrentUserAndStats()
           }}
         />
@@ -1523,14 +1544,14 @@ function CaseReviewModal({
 /* =========================================================================
    OWNERS VIEW
    ========================================================================= */
-function OwnersView({ onNewOwner }: { onNewOwner?: () => void }) {
+function OwnersView({ onNewOwner, refreshKey }: { onNewOwner?: () => void; refreshKey?: number }) {
   const [owners, setOwners] = useState<OwnerRecord[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const loadOwners = (query = '') => {
     setLoading(true)
-    api.owners(search)
+    api.owners(query)
       .then((data) => setOwners(data))
       .catch(() => {
         setOwners([
@@ -1543,7 +1564,9 @@ function OwnersView({ onNewOwner }: { onNewOwner?: () => void }) {
         ])
       })
       .finally(() => setLoading(false))
-  }, [search])
+  }
+
+  useEffect(() => { loadOwners(search) }, [search, refreshKey])
 
   return (
     <section className="workspace-page">
@@ -2013,6 +2036,7 @@ function NewOwnerModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  // onCreated is called after successful creation — parent refreshes the list
   const [ownerCode, setOwnerCode] = useState('')
   const [fullName, setFullName] = useState('')
   const [idNumber, setIdNumber] = useState('')
