@@ -72,17 +72,8 @@ const roleNavigation: Record<string, string[]> = {
   AUDITOR: ['Dashboard', 'Parcels', 'Owners', 'Transactions', 'Cases', 'Audit logs', 'Reports'],
 }
 
-const fallbackAlerts = [
-  { id: 'CASE-0441', title: 'Recent ownership change & concurrent sale', meta: '1 hr ago', risk: 'High' as Risk },
-  { id: 'CASE-0443', title: 'Recent ownership change detected', meta: '3 hrs ago', risk: 'Medium' as Risk },
-  { id: 'CASE-0445', title: 'Possible duplicate transaction detected', meta: '5 hrs ago', risk: 'High' as Risk },
-]
-
-const fallbackActivity = [
-  { icon: Check, text: 'Verified transaction TX-98231 on parcel RW-10432', time: '2h ago', tone: 'green' },
-  { icon: FolderOpen, text: 'Opened review case CASE-0441 for parcel RW-20991', time: '4h ago', tone: 'blue' },
-  { icon: Sparkles, text: 'AI Risk prediction completed for TX-98236: HIGH risk (76/100)', time: '6h ago', tone: 'amber' },
-]
+const fallbackAlerts: { id: string; title: string; meta: string; risk: Risk }[] = []
+const fallbackActivity: { icon: typeof Check; text: string; time: string; tone: string }[] = []
 
 function App() {
   const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('landguard_demo_session') === 'true')
@@ -147,13 +138,13 @@ function App() {
   }
 
   const displayStats = stats ?? {
-    total_parcels: 6,
-    total_owners: 10,
-    total_transactions: 8,
-    transactions_under_review: 5,
-    low_risk_transactions: 2,
-    medium_risk_transactions: 2,
-    high_risk_transactions: 4,
+    total_parcels: 0,
+    total_owners: 0,
+    total_transactions: 0,
+    transactions_under_review: 0,
+    low_risk_transactions: 0,
+    medium_risk_transactions: 0,
+    high_risk_transactions: 0,
     recent_verification_activity: [],
     recent_alerts: [],
   }
