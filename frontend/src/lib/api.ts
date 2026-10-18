@@ -49,6 +49,18 @@ export const api = {
   audit: () => request<AuditRecord[]>('/api/audit-logs'),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
+  evidenceForTransaction: (transactionId: number) => request<EvidenceOut[]>(`/api/evidence/transactions/${transactionId}`),
+  uploadEvidence: (transactionId: number, file: File, documentType: string, metadata: { statedPaymentAmount?: string; paymentReference?: string; notes?: string }) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('document_type', documentType)
+    if (metadata.statedPaymentAmount) formData.append('stated_payment_amount', metadata.statedPaymentAmount)
+    if (metadata.paymentReference) formData.append('payment_reference', metadata.paymentReference)
+    if (metadata.notes) formData.append('notes', metadata.notes)
+    return request<EvidenceOut>(`/api/evidence/transactions/${transactionId}`, { method: 'POST', body: formData })
+  },
+  reviewEvidence: (evidenceId: number, payload: { status: string; reviewNotes: string }) => request<EvidenceOut>(`/api/evidence/${evidenceId}/review`, { method: 'PUT', body: JSON.stringify(payload) }),
+  evidenceList: () => request<EvidenceOut[]>('/api/evidence'),
 }
 
 export type DashboardStats = {
@@ -154,4 +166,34 @@ export type PublicParcelOut = {
   has_pending_transaction: boolean
   warning_message: string | null
   public_notice: string
+}
+
+export type EvidenceOut = {
+  id: number
+  transaction_id: number
+  document_type: string
+  original_filename: string
+  file_size: number
+  mime_type: string
+  status: string
+  stated_payment_amount: string | null
+  stated_payment_date: string | null
+  payment_reference: string | null
+  notes: string | null
+  uploaded_by: number
+  reviewed_by: number | null
+  reviewed_at: string | null
+  review_notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EvidenceReviewHistoryOut = {
+  id: number
+  evidence_id: number
+  previous_status: string | null
+  new_status: string
+  changed_by: number | null
+  reason: string | null
+  created_at: string
 }

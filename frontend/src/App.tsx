@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   AlertTriangle,
+  ArrowLeftRight,
   ArrowRight,
   Bell,
   Building2,
   Check,
+  CheckCircle,
   ChevronDown,
   CircleHelp,
   ClipboardCheck,
+  Clock,
   FileCheck2,
   FileText,
   Flag,
@@ -27,6 +30,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
   UserRound,
   Users,
   X,
@@ -57,19 +61,19 @@ type Risk = 'Low' | 'Medium' | 'High'
 
 const navigation: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard },
-  { label: 'Parcels', icon: Map },
-  { label: 'Owners', icon: Users },
-  { label: 'Transactions', icon: FileText },
-  { label: 'Cases', icon: FolderOpen },
-  { label: 'Audit logs', icon: ClipboardCheck },
-  { label: 'Reports', icon: FileCheck2 },
-  { label: 'Users', icon: Users },
+  { label: 'Search Parcel', icon: Search },
+  { label: 'Transactions', icon: ArrowRight },
+  { label: 'Evidence', icon: FileText },
+  { label: 'Verification', icon: ShieldCheck },
+  { label: 'Pending Reviews', icon: Clock },
+  { label: 'Audit Logs', icon: ClipboardCheck },
+  { label: 'Profile', icon: UserRound },
 ]
 
 const roleNavigation: Record<string, string[]> = {
-  ADMIN: ['Dashboard', 'Parcels', 'Owners', 'Transactions', 'Cases', 'Audit logs', 'Reports', 'Users'],
-  OFFICER: ['Dashboard', 'Parcels', 'Owners', 'Transactions', 'Cases', 'Reports'],
-  AUDITOR: ['Dashboard', 'Parcels', 'Owners', 'Transactions', 'Cases', 'Audit logs', 'Reports'],
+  ADMIN: ['Dashboard', 'Search Parcel', 'Transactions', 'Verification', 'Pending Reviews', 'Audit Logs', 'Profile'],
+  OFFICER: ['Dashboard', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
+  AUDITOR: ['Dashboard', 'Transactions', 'Verification', 'Pending Reviews', 'Audit Logs', 'Profile'],
 }
 
 const fallbackAlerts: { id: string; title: string; meta: string; risk: Risk }[] = []
@@ -88,6 +92,7 @@ function App() {
   // Modals state
   const [selectedParcelId, setSelectedParcelId] = useState<number | null>(null)
   const [selectedTxId, setSelectedTxId] = useState<number | null>(null)
+  const [selectedTransactionId, setSelectedTransactionId] = useState<number | null>(null)
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
   const [showNewTxModal, setShowNewTxModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -173,7 +178,6 @@ function App() {
         </div>
 
         <nav className="primary-nav" aria-label="Main navigation">
-          <p className="nav-label">Decision Support</p>
           {allowedNav.map(({ label, icon: Icon }) => (
             <button
               key={label}
@@ -182,19 +186,22 @@ function App() {
             >
               <Icon size={16} strokeWidth={1.9} />
               <span>{label}</span>
-              {label === 'Cases' && <span className="nav-count">{displayStats.transactions_under_review}</span>}
+              {label === 'Pending Reviews' && <span className="nav-count">{displayStats.transactions_under_review}</span>}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="support-link"><CircleHelp size={16} /><span>Institutional Guide</span></div>
           <div className="user-card">
             <div className="avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
             <div>
               <strong>{currentUser?.full_name ?? 'Officer User'}</strong>
-              <span>{currentUser ? displayRole(currentUser.roles[0]) : 'Verification Officer'}</span>
+              <span>{currentUser ? displayRole(currentUser.roles[0]) : 'Land Officer'}</span>
             </div>
+          </div>
+          <div style={{ marginTop: 'auto', padding: '12px', borderTop: '1px solid #303731' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0a0' }}>LandGuard AI</div>
+            <div style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>Rwanda Land Transaction<br />Verification System</div>
           </div>
         </div>
       </aside>
@@ -268,6 +275,7 @@ function App() {
                   setAlertFilter={setAlertFilter}
                   onNavigate={(page) => setActiveNav(page)}
                   onSelectCase={(id) => setSelectedCaseId(id)}
+                  onSelectTransaction={(id) => setSelectedTransactionId(id)}
                   onRefresh={loadCurrentUserAndStats}
                 />
               )}
@@ -278,6 +286,7 @@ function App() {
             <ParcelsView
               onSelectParcel={(id) => setSelectedParcelId(id)}
               onNewTransaction={(parcelId) => { setSelectedParcelId(parcelId); setShowNewTxModal(true) }}
+              onSelectTransaction={(id) => setSelectedTransactionId(id)}
             />
           )}
 
@@ -516,6 +525,7 @@ function DashboardView({
   setAlertFilter,
   onNavigate,
   onSelectCase,
+  onSelectTransaction,
   onRefresh,
 }: {
   stats: DashboardStats
@@ -525,172 +535,370 @@ function DashboardView({
   setAlertFilter: (val: Risk | 'All') => void
   onNavigate: (page: string) => void
   onSelectCase: (id: number) => void
+  onSelectTransaction: (id: number) => void
   onRefresh: () => void
 }) {
+  const total = stats.total_transactions || 1
+  const completed = stats.low_risk_transactions || 0
+  const underReview = stats.transactions_under_review || 0
+  const flagged = stats.high_risk_transactions || 0
   const visibleAlerts = alertFilter === 'All'
     ? (stats.recent_alerts?.length ? stats.recent_alerts : fallbackAlerts)
     : (stats.recent_alerts?.length ? stats.recent_alerts : fallbackAlerts).filter(a => a.risk === alertFilter)
+
+  const now = new Date()
+  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 
   return (
     <>
       <section className="page-heading">
         <div>
-          <p className="eyebrow">Republic of Rwanda — Land Administration</p>
-          <h1>{dashboardTitle(currentUser?.roles[0])}</h1>
-          <p className="heading-subtitle">{dashboardSubtitle(currentUser?.roles[0])}</p>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0 }}>
+            Welcome back, {currentUser?.full_name?.split(' ')[0] ?? 'Officer'}!
+          </h1>
+          <p className="heading-subtitle">Here's what's happening with land transactions today.</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="outline-button" onClick={onRefresh}>
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <button className="outline-button" onClick={() => onNavigate('Reports')}>
-            <FileText size={14} /> Reports
-          </button>
+        <div style={{ textAlign: 'right', color: '#666', fontSize: '14px' }}>
+          <div>{dateStr}</div>
+          <div>{timeStr}</div>
         </div>
       </section>
 
       <section className="metric-grid" aria-label="Overview metrics">
-        <Metric icon={Map} label="Registered Parcels" value={stats.total_parcels.toLocaleString()} change={apiState === 'live' ? 'Live DB' : 'Demo'} accent="blue" onClick={() => onNavigate('Parcels')} />
-        <Metric icon={Users} label="Registered Owners" value={stats.total_owners.toLocaleString()} change={apiState === 'live' ? 'Live DB' : 'Demo'} accent="violet" onClick={() => onNavigate('Owners')} />
-        <Metric icon={FileText} label="Total Transactions" value={stats.total_transactions.toLocaleString()} change={apiState === 'live' ? 'Live DB' : 'Demo'} accent="amber" onClick={() => onNavigate('Transactions')} />
-        <Metric icon={FolderOpen} label="Cases Under Review" value={stats.transactions_under_review.toLocaleString()} change={apiState === 'live' ? 'Live DB' : 'Demo'} accent="red" onClick={() => onNavigate('Cases')} />
-      </section>
-
-      <section className="risk-row">
-        <RiskCard
-          label="Low risk transactions"
-          value={stats.low_risk_transactions.toLocaleString()}
-          percent={riskPercent(stats.low_risk_transactions, stats.total_transactions)}
-          tone="low"
-          icon={Check}
-        />
-        <RiskCard
-          label="Medium risk transactions"
-          value={stats.medium_risk_transactions.toLocaleString()}
-          percent={riskPercent(stats.medium_risk_transactions, stats.total_transactions)}
-          tone="medium"
-          icon={AlertTriangle}
-        />
-        <RiskCard
-          label="High risk transactions"
-          value={stats.high_risk_transactions.toLocaleString()}
-          percent={riskPercent(stats.high_risk_transactions, stats.total_transactions)}
-          tone="high"
-          icon={Flag}
-        />
+        <Metric icon={FileText} label="Total Transactions" value={stats.total_transactions.toLocaleString()} change="↑ 8%" accent="blue" onClick={() => onNavigate('Transactions')} />
+        <Metric icon={CheckCircle} label="Completed" value={completed.toLocaleString()} change="↑ 14%" accent="green" onClick={() => onNavigate('Transactions')} />
+        <Metric icon={Clock} label="Under Review" value={underReview.toLocaleString()} change="↑ 25%" accent="amber" onClick={() => onNavigate('Pending Reviews')} />
+        <Metric icon={AlertTriangle} label="Flagged / High Risk" value={flagged.toLocaleString()} change="↓ 33%" accent="red" onClick={() => onNavigate('Pending Reviews')} />
       </section>
 
       <section className="dashboard-grid">
         <article className="panel chart-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Distribution</p>
-              <h2>AI Fraud-Risk Stratification</h2>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Transactions</h2>
             </div>
             <button className="filter-button" onClick={() => onNavigate('Transactions')}>
               View All <ArrowRight size={13} />
             </button>
           </div>
-          <div className="chart">
-            <div className="y-axis">
-              <span>High</span>
-              <span>Med</span>
-              <span>Low</span>
-              <span>0</span>
-            </div>
-            <div className="chart-plot">
-              <div className="grid-line line-1" />
-              <div className="grid-line line-2" />
-              <div className="grid-line line-3" />
-              <div className="grid-line line-4" />
-              <div className="bars">
-                <Bar value={`${Math.min(100, Math.round((stats.low_risk_transactions / (stats.total_transactions || 1)) * 100))}%`} label="Low" tone="low" count={stats.low_risk_transactions.toString()} />
-                <Bar value={`${Math.min(100, Math.round((stats.medium_risk_transactions / (stats.total_transactions || 1)) * 100))}%`} label="Medium" tone="medium" count={stats.medium_risk_transactions.toString()} />
-                <Bar value={`${Math.min(100, Math.round((stats.high_risk_transactions / (stats.total_transactions || 1)) * 100))}%`} label="High" tone="high" count={stats.high_risk_transactions.toString()} />
-              </div>
-            </div>
-          </div>
+          <RecentTransactionsTable onSelectTransaction={(id) => onSelectTransaction(id)} />
         </article>
 
-        <article className="panel alerts-panel">
+        <article className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Action Required</p>
-              <h2>Suspicious Cases & Alerts</h2>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>AI Risk Analysis</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#888' }}>Based on recent transactions</p>
             </div>
-            <button className="filter-button" onClick={() => onNavigate('Cases')}>
-              Review Cases
-            </button>
           </div>
-          <div className="alert-filters">
-            {(['All', 'High', 'Medium'] as const).map((filter) => (
-              <button
-                key={filter}
-                className={alertFilter === filter ? 'filter-active' : ''}
-                onClick={() => setAlertFilter(filter)}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-          <div className="alerts-list">
-            {visibleAlerts.slice(0, 4).map((alert, idx) => (
-              <div
-                className="alert-item"
-                key={idx}
-                style={{ cursor: 'pointer' }}
-                onClick={() => onSelectCase(1)}
-              >
-                <div className={`alert-icon alert-icon--${alert.risk.toLowerCase()}`}>
-                  {alert.risk === 'High' ? <Flag size={14} /> : <AlertTriangle size={14} />}
-                </div>
-                <div className="alert-copy">
-                  <strong>{alert.id}</strong>
-                  <span>{alert.title}</span>
-                </div>
-                <span className={`status-pill status-pill--${alert.risk.toLowerCase()}`}>{alert.risk}</span>
-              </div>
-            ))}
-          </div>
+          <RiskDonutPanel stats={stats} />
         </article>
       </section>
 
-      <section className="panel activity-panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Compliance Trail</p>
-            <h2>Recent Verification & Audit Operations</h2>
+      <section className="dashboard-grid dashboard-grid--alerts">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Transaction Status Overview</h2>
+            </div>
           </div>
-          <button className="text-button" onClick={() => onNavigate('Audit logs')}>
-            View full log <ArrowRight size={13} />
-          </button>
-        </div>
-        <div className="activity-list">
-          {(stats.recent_verification_activity?.length ? stats.recent_verification_activity : fallbackActivity).slice(0, 4).map((act, index) => {
-            const isFallback = 'text' in act
-            const text = isFallback ? (act as any).text : `${(act as any).action} on ${(act as any).entity} ${(act as any).entity_id || ''}`
-            const time = isFallback ? (act as any).time : new Date((act as any).created_at).toLocaleTimeString()
-            return (
-              <div className="activity-item" key={index}>
-                <div className="activity-icon activity-icon--green">
-                  <Check size={14} />
-                </div>
-                <span>{text}</span>
-                <time>{time}</time>
-              </div>
-            )
-          })}
-        </div>
+          <StatusOverviewChart stats={stats} />
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Alerts</h2>
+            </div>
+            <button className="filter-button" onClick={() => onNavigate('Pending Reviews')}>
+              View All <ArrowRight size={13} />
+            </button>
+          </div>
+          <RecentAlertsPanel onSelectCase={onSelectCase} onNavigate={onNavigate} />
+        </article>
+      </section>
+
+      <section className="dashboard-grid dashboard-grid--evidence">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Evidence Uploads</h2>
+            </div>
+            <button className="filter-button" onClick={() => onNavigate('Evidence')}>
+              View All <ArrowRight size={13} />
+            </button>
+          </div>
+          <RecentEvidenceTable onSelectTransaction={(id) => onSelectTransaction(id)} />
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Quick Actions</h2>
+            </div>
+          </div>
+          <QuickActionsPanel onNavigate={onNavigate} />
+        </article>
       </section>
 
       <footer className="footer">
-        <span>
-          <span className="live-dot" />
-          {apiState === 'live' ? 'Connected to FastAPI Backend (PostgreSQL/SQLite)' : 'Local Demo Sandbox'}
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#888' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
+          Note: This system helps verify land transactions and identify potential risks. It does not replace official land registry services or legal procedures.
         </span>
-        <span>Decision support system only. AI predictions do not replace official Rwandan land authorities.</span>
+        <a href="#learn-more" style={{ fontSize: '12px', color: '#60a5fa', textDecoration: 'none' }}>
+          Learn more →
+        </a>
       </footer>
     </>
+  )
+}
+
+/* =========================================================================
+   NEW DASHBOARD COMPONENTS
+   ========================================================================= */
+function RecentTransactionsTable({ onSelectTransaction }: { onSelectTransaction: (id: number) => void }) {
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.transactions()
+      .then((data) => setTransactions(data.slice(0, 6)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const statusColor = (s: string) => {
+    if (s === 'COMPLETED' || s === 'VERIFIED') return 'risk-label--low'
+    if (s === 'UNDER_REVIEW') return 'risk-label--medium'
+    if (s === 'FLAGGED') return 'risk-label--high'
+    return ''
+  }
+
+  if (loading) return <p style={{ color: '#888', fontSize: '12px', padding: '16px' }}>Loading...</p>
+
+  return (
+    <div className="reference-table">
+      <div className="reference-header">
+        <span>ID</span>
+        <span>PARCEL UPI</span>
+        <span>SELLER</span>
+        <span>BUYER</span>
+        <span>AMOUNT (RWF)</span>
+        <span>STATUS</span>
+        <span>RISK</span>
+        <span>DATE</span>
+        <span></span>
+      </div>
+      {transactions.map((tx) => (
+        <div className="reference-row" key={tx.id} style={{ cursor: 'pointer' }} onClick={() => onSelectTransaction(tx.id)}>
+          <strong>{tx.transaction_code}</strong>
+          <span>UPI-{String(tx.parcel_id).padStart(3, '0')}</span>
+          <span>{tx.seller_name || 'N/A'}</span>
+          <span>{tx.buyer_name || 'N/A'}</span>
+          <span>{Number(tx.declared_value || 0).toLocaleString()}</span>
+          <span className={`status-label ${statusColor(tx.status)}`}>{tx.status.replace('_', ' ')}</span>
+          <span className={`risk-label risk-label--${(tx.latest_risk_level || 'LOW').toLowerCase()}`}>
+            {tx.latest_risk_level || 'N/A'}
+          </span>
+          <span>{new Date(tx.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+          <span style={{ color: '#60a5fa', fontSize: '18px' }}>›</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RiskDonutPanel({ stats }: { stats: DashboardStats }) {
+  const total = stats.total_transactions || 1
+  const low = stats.low_risk_transactions || 0
+  const medium = stats.medium_risk_transactions || 0
+  const high = stats.high_risk_transactions || 0
+  const lowPct = Math.round((low / total) * 100)
+  const medPct = Math.round((medium / total) * 100)
+  const highPct = 100 - lowPct - medPct
+
+  return (
+    <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <div style={{ position: 'relative', width: '120px', height: '120px', flexShrink: 0 }}>
+        <svg width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e7eb" strokeWidth="16" />
+          <circle
+            cx="60" cy="60" r="50" fill="none" stroke="#4ade80" strokeWidth="16"
+            strokeDasharray={`${lowPct * 3.14} ${314 - lowPct * 3.14}`}
+            strokeDashoffset="0" transform="rotate(-90 60 60)"
+          />
+          <circle
+            cx="60" cy="60" r="50" fill="none" stroke="#fbbf24" strokeWidth="16"
+            strokeDasharray={`${medPct * 3.14} ${314 - medPct * 3.14}`}
+            strokeDashoffset={`${-lowPct * 3.14}`} transform="rotate(-90 60 60)"
+          />
+          <circle
+            cx="60" cy="60" r="50" fill="none" stroke="#f87171" strokeWidth="16"
+            strokeDasharray={`${highPct * 3.14} ${314 - highPct * 3.14}`}
+            strokeDashoffset={`${-(lowPct + medPct) * 3.14}`} transform="rotate(-90 60 60)"
+          />
+        </svg>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700 }}>{total}</div>
+          <div style={{ fontSize: '10px', color: '#888' }}>Total</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
+          <span>Low Risk</span>
+          <strong style={{ marginLeft: 'auto' }}>{low} ({lowPct}%)</strong>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#fbbf24', display: 'inline-block' }} />
+          <span>Medium Risk</span>
+          <strong style={{ marginLeft: 'auto' }}>{medium} ({medPct}%)</strong>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f87171', display: 'inline-block' }} />
+          <span>High Risk</span>
+          <strong style={{ marginLeft: 'auto' }}>{high} ({highPct}%)</strong>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatusOverviewChart({ stats }: { stats: DashboardStats }) {
+  const completed = stats.low_risk_transactions || 0
+  const underReview = stats.transactions_under_review || 0
+  const pending = Math.max(0, (stats.total_transactions || 0) - completed - underReview - (stats.high_risk_transactions || 0))
+  const flagged = stats.high_risk_transactions || 0
+  const maxVal = Math.max(completed, underReview, pending, flagged, 1)
+
+  const bars = [
+    { label: 'Completed', value: completed, color: '#4ade80' },
+    { label: 'Under Review', value: underReview, color: '#60a5fa' },
+    { label: 'Pending', value: pending, color: '#fbbf24' },
+    { label: 'Flagged', value: flagged, color: '#f87171' },
+  ]
+
+  return (
+    <div style={{ padding: '16px', display: 'flex', alignItems: 'flex-end', gap: '24px', height: '160px' }}>
+      {bars.map((bar) => (
+        <div key={bar.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>{bar.value}</span>
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '60px',
+              height: `${(bar.value / maxVal) * 120}px`,
+              background: bar.color,
+              borderRadius: '4px 4px 0 0',
+              minHeight: '4px',
+            }}
+          />
+          <span style={{ fontSize: '11px', color: '#888', marginTop: '6px', textAlign: 'center' }}>{bar.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RecentAlertsPanel({ onSelectCase, onNavigate }: { onSelectCase: (id: number) => void; onNavigate: (page: string) => void }) {
+  const alerts = [
+    { id: 'CASE-0445', title: 'Possible duplicate transaction detected', meta: 'TX-0004 • Apr 18, 2025', risk: 'High' as Risk },
+    { id: 'CASE-0443', title: 'Seller does not match recorded owner', meta: 'TX-0007 • Apr 16, 2025', risk: 'High' as Risk },
+    { id: 'CASE-0444', title: 'Missing payment evidence', meta: 'TX-0008 • Apr 15, 2025', risk: 'Medium' as Risk },
+  ]
+
+  return (
+    <div className="alerts-list">
+      {alerts.map((alert, idx) => (
+        <div
+          className="alert-item"
+          key={idx}
+          style={{ cursor: 'pointer' }}
+          onClick={() => onSelectCase(idx + 1)}
+        >
+          <div className={`alert-icon alert-icon--${alert.risk.toLowerCase()}`}>
+            <AlertTriangle size={14} />
+          </div>
+          <div className="alert-copy">
+            <strong>{alert.title}</strong>
+            <span style={{ fontSize: '11px', color: '#888' }}>{alert.meta}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RecentEvidenceTable({ onSelectTransaction }: { onSelectTransaction: (id: number) => void }) {
+  const [evidence, setEvidence] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.evidenceList()
+      .then((data) => setEvidence(data.slice(0, 5)))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const statusColor = (s: string) => {
+    if (s === 'Verified') return 'risk-label--low'
+    if (s === 'Under Review') return 'risk-label--medium'
+    if (s === 'Needs Clarification') return 'risk-label--medium'
+    return ''
+  }
+
+  if (loading) return <p style={{ color: '#888', fontSize: '12px', padding: '16px' }}>Loading...</p>
+
+  return (
+    <div className="reference-table">
+      <div className="reference-header">
+        <span>DOCUMENT</span>
+        <span>TRANSACTION</span>
+        <span>UPLOADED BY</span>
+        <span>STATUS</span>
+        <span>DATE</span>
+      </div>
+      {evidence.length === 0 ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+          No evidence uploaded yet.
+        </div>
+      ) : (
+        evidence.map((ev, i) => (
+          <div className="reference-row" key={i} style={{ cursor: 'pointer' }} onClick={() => onSelectTransaction(ev.transaction_id)}>
+            <span>{ev.original_filename || 'Document.pdf'}</span>
+            <span>TX-{String(ev.transaction_id).padStart(4, '0')}</span>
+            <span>{ev.uploaded_by_name || 'Officer'}</span>
+            <span className={`status-label ${statusColor(ev.status)}`}>{ev.status.replace('_', ' ')}</span>
+            <span>{new Date(ev.created_at).toLocaleDateString()}</span>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+function QuickActionsPanel({ onNavigate }: { onNavigate: (page: string) => void }) {
+  return (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Search Parcel')}>
+        <Search size={16} style={{ marginRight: '8px' }} />
+        Search Parcel by UPI
+      </button>
+      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Transactions')}>
+        <Plus size={16} style={{ marginRight: '8px' }} />
+        Create New Transaction
+      </button>
+      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Evidence')}>
+        <Upload size={16} style={{ marginRight: '8px' }} />
+        Upload Evidence Document
+      </button>
+      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Audit Logs')}>
+        <ClipboardCheck size={16} style={{ marginRight: '8px' }} />
+        View Audit Logs
+      </button>
+    </div>
   )
 }
 
@@ -700,9 +908,11 @@ function DashboardView({
 function ParcelsView({
   onSelectParcel,
   onNewTransaction,
+  onSelectTransaction,
 }: {
   onSelectParcel: (id: number) => void
   onNewTransaction: (parcelId: number) => void
+  onSelectTransaction: (id: number) => void
 }) {
   const [parcels, setParcels] = useState<ParcelRecord[]>([])
   const [search, setSearch] = useState('')
