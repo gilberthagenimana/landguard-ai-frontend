@@ -2,7 +2,7 @@
  * Evidence Section — upload, view, and review transaction supporting documents.
  */
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ChangeEvent } from 'react'
 import {
   Upload,
   FileText,
@@ -11,7 +11,6 @@ import {
   XCircle,
   Clock,
   Download,
-  Eye,
   Loader2,
 } from 'lucide-react'
 import { api, type EvidenceOut, type EvidenceReviewHistoryOut } from '../lib/api'
@@ -24,13 +23,13 @@ const DOCUMENT_TYPES = [
   { value: 'SUPPORTING_DOCUMENT', label: 'Supporting Document' },
 ] as const
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
-  NOT_PROVIDED: { label: 'Not Provided', color: '#888', icon: Clock },
-  UPLOADED: { label: 'Uploaded', color: '#60a5fa', icon: Upload },
-  UNDER_REVIEW: { label: 'Under Review', color: '#fbbf24', icon: Clock },
-  VERIFIED_FOR_REVIEW: { label: 'Verified for Review', color: '#4ade80', icon: CheckCircle },
-  NEEDS_CLARIFICATION: { label: 'Needs Clarification', color: '#f59e0b', icon: AlertTriangle },
-  INCONSISTENT: { label: 'Inconsistent', color: '#f87171', icon: XCircle },
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof CheckCircle }> = {
+  NOT_PROVIDED: { label: 'Not Provided', color: '#888', bg: '#f5f5f5', icon: XCircle },
+  UPLOADED: { label: 'Uploaded', color: '#60a5fa', bg: '#eff6ff', icon: Upload },
+  UNDER_REVIEW: { label: 'Under Review', color: '#fbbf24', bg: '#fffbeb', icon: Clock },
+  VERIFIED_FOR_REVIEW: { label: 'Verified for Review', color: '#4ade80', bg: '#f0fdf4', icon: CheckCircle },
+  NEEDS_CLARIFICATION: { label: 'Needs Clarification', color: '#f59e0b', bg: '#fffbeb', icon: AlertTriangle },
+  INCONSISTENT: { label: 'Inconsistent', color: '#f87171', bg: '#fef2f2', icon: XCircle },
 }
 
 interface EvidenceSectionProps {
@@ -111,6 +110,10 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
     }
   }
 
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setFile(e.target.files?.[0] || null)
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
@@ -170,7 +173,7 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
             <input
               type="file"
               accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={handleFileChange}
               style={{ width: '100%', padding: '8px', background: '#101310', border: '1px solid #303731', borderRadius: '4px', color: '#fff' }}
             />
           </div>
@@ -229,7 +232,7 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
 
       {evidence.length === 0 ? (
         <div style={{ padding: '24px', textAlign: 'center', color: '#888', background: '#1a1a1a', borderRadius: '8px', border: '1px dashed #303731' }}>
-          <FileText size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+          <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
           <p style={{ margin: 0 }}>No evidence uploaded for this transaction.</p>
           {canUpload && <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Click "Upload Evidence" to add supporting documents.</p>}
         </div>
@@ -243,8 +246,8 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <FileText size={16} />
-                    <strong>{ev.original_filename}</strong>
-                    <span style={{ fontSize: '11px', color: '#888', background: '#303731', padding: '2px 6px', borderRadius: '4px' }}>
+                    <strong>{ev.original_filename || 'Document'}</strong>
+                    <span style={{ fontSize: '11px', color: '#888', background: '#303731', padding: '2px 8px', borderRadius: '4px' }}>
                       {ev.document_type}
                     </span>
                   </div>
@@ -259,10 +262,6 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
                     <span style={{ color: '#888' }}>File Size:</span>
                     <div>{(ev.file_size / 1024).toFixed(1)} KB</div>
                   </div>
-                  <div>
-                    <span style={{ color: '#888' }}>Uploaded:</span>
-                    <div>{new Date(ev.created_at).toLocaleDateString()}</div>
-                  </div>
                   {ev.stated_payment_amount && (
                     <div>
                       <span style={{ color: '#888' }}>Stated Amount:</span>
@@ -275,17 +274,15 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
                       <div>{ev.payment_reference}</div>
                     </div>
                   )}
+                  <div>
+                    <span style={{ color: '#888' }}>Uploaded:</span>
+                    <div>{new Date(ev.created_at).toLocaleDateString()}</div>
+                  </div>
                 </div>
 
                 {ev.notes && (
                   <div style={{ fontSize: '12px', color: '#a0a0a0', marginBottom: '12px', padding: '8px', background: '#101310', borderRadius: '4px' }}>
                     <span style={{ color: '#888' }}>Notes:</span> {ev.notes}
-                  </div>
-                )}
-
-                {ev.review_notes && (
-                  <div style={{ fontSize: '12px', color: '#fbbf24', marginBottom: '12px', padding: '8px', background: '#2a1a1a', borderRadius: '4px' }}>
-                    <span style={{ color: '#888' }}>Review Notes:</span> {ev.review_notes}
                   </div>
                 )}
 

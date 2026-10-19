@@ -31,6 +31,10 @@ export const api = {
   createUser: (payload: object) => request<UserRecord>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
   disableUser: (id: number) => request(`/api/users/${id}`, { method: 'DELETE' }),
   parcels: (q = '') => request<ParcelRecord[]>(`/api/parcels${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  parcelByUpi: (upi: string) => request<ParcelRecord>(`/api/parcels/upi/${encodeURIComponent(upi)}`),
+  submitParcelLocation: (parcelId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/${parcelId}/location-submissions`, { method: 'POST', body: JSON.stringify(payload) }),
+  parcelLocationSubmissions: (parcelId: number) => request<ParcelLocationSubmission[]>(`/api/parcels/${parcelId}/location-submissions`),
+  reviewParcelLocation: (submissionId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/location-submissions/${submissionId}/review`, { method: 'PUT', body: JSON.stringify(payload) }),
   parcel: (id: number) => request<ParcelRecord>(`/api/parcels/${id}`),
   ownership: (id: number) => request<OwnershipRecord[]>(`/api/parcels/${id}/ownership-history`),
   parcelTransactions: (id: number) => request<TransactionRecord[]>(`/api/parcels/${id}/transactions`),
@@ -81,6 +85,7 @@ export type UserRecord = Omit<CurrentUser, 'roles'> & { roles: RoleRecord[] }
 export type ParcelRecord = {
   id: number
   parcel_code: string
+  upi?: string
   location: string
   province: string
   district: string
@@ -92,6 +97,28 @@ export type ParcelRecord = {
   current_owner_name?: string | null
   current_owner_id?: number | null
   updated_at: string
+  latitude?: number | null
+  longitude?: number | null
+  geometry?: unknown
+  boundary_geometry?: unknown
+  location_data_source?: string | null
+  location_verification_status?: string
+  location_verification_metadata?: Record<string, unknown> | null
+}
+export type ParcelLocationSubmission = {
+  id: number
+  parcel_id: number
+  latitude: number | null
+  longitude: number | null
+  boundary_geometry?: unknown
+  source: string
+  metadata?: Record<string, unknown> | null
+  status: string
+  submitted_by: number
+  submitted_at: string
+  reviewed_by?: number | null
+  reviewed_at?: string | null
+  review_notes?: string | null
 }
 export type OwnerRecord = {
   id: number

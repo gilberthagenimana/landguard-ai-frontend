@@ -1,104 +1,53 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  AlertTriangle,
-  ArrowLeftRight,
-  ArrowRight,
-  Bell,
-  Building2,
-  Check,
-  CheckCircle,
-  ChevronDown,
-  CircleHelp,
-  ClipboardCheck,
-  Clock,
-  FileCheck2,
-  FileText,
-  Flag,
-  FolderOpen,
-  History,
-  LayoutDashboard,
-  LogOut,
-  Map,
-  Menu,
-  MinusCircle,
-  Plus,
-  Printer,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
-  Upload,
-  UserRound,
-  Users,
-  X,
+  AlertTriangle, ArrowRight, Bell, Check, CheckCircle, ChevronDown,
+  ClipboardCheck, Clock, Download, FileText, Flag, FolderOpen, LayoutDashboard,
+  LogOut, MapPin, Menu, Plus, Search, Shield, ShieldCheck, Upload,
+  UserRound, Users, X, Eye, FileIcon, AlertCircle, Info, Filter, RotateCcw,
 } from 'lucide-react'
 import {
-  api,
-  type AuditRecord,
-  type CaseDetail,
-  type CaseRecord,
-  type CurrentUser,
-  type DashboardStats,
-  type OwnerRecord,
-  type OwnershipRecord,
-  type ParcelRecord,
-  type RiskResponse,
-  type TransactionRecord,
-  type UserRecord,
-  type VerificationResponse,
-  type VerificationResult,
+  api, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
+  type DashboardStats, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
+  type RiskResponse, type TransactionRecord, type UserRecord,
+  type VerificationResponse, type VerificationResult,
 } from './lib/api'
 import PublicUpiCheck from './components/PublicUpiCheck'
 import AdminDashboard from './components/AdminDashboard'
 import OfficerDashboard from './components/OfficerDashboard'
 import AuditorDashboard from './components/AuditorDashboard'
+import EvidenceSection from './components/EvidenceSection'
+import ParcelMap from './components/ParcelMap'
 
-type NavItem = { label: string; icon: typeof LayoutDashboard }
 type Risk = 'Low' | 'Medium' | 'High'
+type Page = 'Dashboard' | 'Search Parcel' | 'Transactions' | 'Evidence' | 'Verification' | 'Pending Reviews' | 'Profile'
 
-const navigation: NavItem[] = [
+const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Search Parcel', icon: Search },
   { label: 'Transactions', icon: ArrowRight },
   { label: 'Evidence', icon: FileText },
   { label: 'Verification', icon: ShieldCheck },
   { label: 'Pending Reviews', icon: Clock },
-  { label: 'Audit Logs', icon: ClipboardCheck },
   { label: 'Profile', icon: UserRound },
 ]
 
 const roleNavigation: Record<string, string[]> = {
-  ADMIN: ['Dashboard', 'Search Parcel', 'Transactions', 'Verification', 'Pending Reviews', 'Audit Logs', 'Profile'],
+  ADMIN: ['Dashboard', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Reports', 'Profile'],
   OFFICER: ['Dashboard', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
-  AUDITOR: ['Dashboard', 'Transactions', 'Verification', 'Pending Reviews', 'Audit Logs', 'Profile'],
+  AUDITOR: ['Dashboard', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
 }
 
-const fallbackAlerts: { id: string; title: string; meta: string; risk: Risk }[] = []
-const fallbackActivity: { icon: typeof Check; text: string; time: string; tone: string }[] = []
-
-function App() {
+export default function App() {
   const [authenticated, setAuthenticated] = useState(() => localStorage.getItem('landguard_demo_session') === 'true')
   const [activeNav, setActiveNav] = useState('Dashboard')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [apiState, setApiState] = useState<'demo' | 'live'>('demo')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
-  const [alertFilter, setAlertFilter] = useState<Risk | 'All'>('All')
-
-  // Modals state
-  const [selectedParcelId, setSelectedParcelId] = useState<number | null>(null)
-  const [selectedTxId, setSelectedTxId] = useState<number | null>(null)
-  const [selectedTransactionId, setSelectedTransactionId] = useState<number | null>(null)
-  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
-  const [showNewTxModal, setShowNewTxModal] = useState(false)
-  const [showProfileModal, setShowProfileModal] = useState(false)
-  const [showNewOwnerModal, setShowNewOwnerModal] = useState(false)
   const [showPublicCheck, setShowPublicCheck] = useState(false)
-  const [ownersRefreshKey, setOwnersRefreshKey] = useState(0)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [openCreateModal, setOpenCreateModal] = useState(false)
+  const [selectedVerificationTxId, setSelectedVerificationTxId] = useState<number | null>(null)
 
   const loadCurrentUserAndStats = async () => {
     try {
@@ -106,17 +55,10 @@ function App() {
       setCurrentUser(user)
       const dashboardStats = await api.stats()
       setStats(dashboardStats)
-      setApiState('live')
-    } catch {
-      setApiState('demo')
-    }
+    } catch { /* demo mode */ }
   }
 
-  useEffect(() => {
-    if (authenticated) {
-      loadCurrentUserAndStats()
-    }
-  }, [authenticated])
+  useEffect(() => { if (authenticated) loadCurrentUserAndStats() }, [authenticated])
 
   const logout = () => {
     api.logout().catch(() => {})
@@ -127,31 +69,15 @@ function App() {
   }
 
   if (!authenticated) {
-    if (showPublicCheck) {
-      return <PublicUpiCheck onBack={() => setShowPublicCheck(false)} />
-    }
-    return (
-      <LoginScreen
-        onContinue={(user) => {
-          localStorage.setItem('landguard_demo_session', 'true')
-          setCurrentUser(user)
-          setAuthenticated(true)
-        }}
-        onPublicCheck={() => setShowPublicCheck(true)}
-      />
-    )
+    if (showPublicCheck) return <PublicUpiCheck onBack={() => setShowPublicCheck(false)} />
+    return <LoginScreen onContinue={(user) => { localStorage.setItem('landguard_demo_session', 'true'); setCurrentUser(user); setAuthenticated(true) }} onPublicCheck={() => setShowPublicCheck(true)} />
   }
 
   const displayStats = stats ?? {
-    total_parcels: 0,
-    total_owners: 0,
-    total_transactions: 0,
-    transactions_under_review: 0,
-    low_risk_transactions: 0,
-    medium_risk_transactions: 0,
-    high_risk_transactions: 0,
-    recent_verification_activity: [],
-    recent_alerts: [],
+    total_parcels: 0, total_owners: 0, total_transactions: 0,
+    transactions_under_review: 0, low_risk_transactions: 0,
+    medium_risk_transactions: 0, high_risk_transactions: 0,
+    recent_verification_activity: [], recent_alerts: [],
   }
 
   const role = currentUser?.roles[0] ?? 'OFFICER'
@@ -163,220 +89,81 @@ function App() {
         <div className="brand-row">
           <div className="brand-mark"><ShieldCheck size={17} strokeWidth={2.4} /></div>
           <span>LandGuard AI</span>
-          <button className="icon-button mobile-close" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}>
-            <X size={18} />
-          </button>
+          <button className="icon-button mobile-close" onClick={() => setMobileNavOpen(false)}><X size={18} /></button>
         </div>
-
-        <div className="workspace-switcher">
-          <div className="workspace-icon"><Building2 size={15} /></div>
-          <div>
-            <strong>Rwanda Cadastre</strong>
-            <span>Verification Authority</span>
-          </div>
-          <ChevronDown size={14} className="workspace-chevron" />
-        </div>
-
-        <nav className="primary-nav" aria-label="Main navigation">
+        <nav className="primary-nav">
           {allowedNav.map(({ label, icon: Icon }) => (
-            <button
-              key={label}
-              className={`nav-item ${activeNav === label ? 'nav-item--active' : ''}`}
-              onClick={() => { setActiveNav(label); setMobileNavOpen(false) }}
-            >
-              <Icon size={16} strokeWidth={1.9} />
-              <span>{label}</span>
-              {label === 'Pending Reviews' && <span className="nav-count">{displayStats.transactions_under_review}</span>}
+            <button key={label} className={`nav-item ${activeNav === label ? 'nav-item--active' : ''}`} onClick={() => { setActiveNav(label); setMobileNavOpen(false) }}>
+              <Icon size={16} strokeWidth={1.9} /><span>{label}</span>
+              {label === 'Pending Reviews' && displayStats.transactions_under_review > 0 && <span className="nav-count">{displayStats.transactions_under_review}</span>}
             </button>
           ))}
         </nav>
-
         <div className="sidebar-bottom">
           <div className="user-card">
             <div className="avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
-            <div>
-              <strong>{currentUser?.full_name ?? 'Officer User'}</strong>
-              <span>{currentUser ? displayRole(currentUser.roles[0]) : 'Land Officer'}</span>
-            </div>
+            <div><strong>{currentUser?.full_name ?? 'Officer User'}</strong><span>{displayRole(role)}</span></div>
           </div>
-          <div style={{ marginTop: 'auto', padding: '12px', borderTop: '1px solid #303731' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0a0' }}>LandGuard AI</div>
-            <div style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>Rwanda Land Transaction<br />Verification System</div>
-          </div>
+          <div className="sidebar-footer-text"><strong>LandGuard AI</strong><span>Rwanda Land Transaction Verification System v1.0</span></div>
         </div>
       </aside>
-
-      {mobileNavOpen && <button className="mobile-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
-
+      {mobileNavOpen && <button className="mobile-backdrop" onClick={() => setMobileNavOpen(false)} />}
       <main className="main-content">
         <header className="topbar">
-          <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}>
-            <Menu size={20} />
-          </button>
-          <div className="breadcrumbs">
-            <span>Workspace</span>
-            <span className="crumb-divider">/</span>
-            <strong>{activeNav}</strong>
-          </div>
-
+          <button className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
+          <div className="breadcrumbs"><span>Workspace</span><span className="crumb-divider">/</span><strong>{activeNav}</strong></div>
           <div className="top-actions">
-            <div className="search-trigger">
-              <Search size={15} />
-              <span>Institutional Decision Support</span>
-              <kbd>RW</kbd>
-            </div>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setActiveNav('Cases')}>
-              <Bell size={18} />
-              {displayStats.transactions_under_review > 0 && <i />}
+            <button className="icon-button" onClick={() => setActiveNav('Pending Reviews')}><Bell size={18} />{displayStats.transactions_under_review > 0 && <i />}</button>
+            <button className="profile-trigger" onClick={() => setShowProfileModal(true)}>
+              <div className="top-avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
+              <span>{currentUser?.full_name ?? 'Officer User'}</span><ChevronDown size={15} />
             </button>
-
-            <div className="profile-menu-wrap">
-              <button className="profile-trigger" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen(!profileMenuOpen)}>
-                <div className="top-avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
-                <span>{currentUser?.full_name ?? 'Officer User'}</span>
-                <ChevronDown size={15} />
-              </button>
-              {profileMenuOpen && (
-                <div className="profile-menu">
-                  <div className="profile-menu-heading">
-                    <strong>{currentUser?.full_name ?? 'Officer User'}</strong>
-                    <span>{currentUser ? displayRole(currentUser.roles[0]) : 'Verification Officer'}</span>
-                  </div>
-                  <button className="profile-menu-item" onClick={() => { setProfileMenuOpen(false); setShowProfileModal(true) }}>
-                    <UserRound size={17} /> Account details
-                  </button>
-                  <button className="profile-menu-item profile-menu-item--logout" onClick={logout}>
-                    <LogOut size={17} /> Sign out
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </header>
-
         <div className="content-wrap">
-          {activeNav === 'Dashboard' && (
-            <>
-              {role === 'ADMIN' && (
-                <AdminDashboard stats={displayStats} currentUser={currentUser} />
-              )}
-              {role === 'OFFICER' && (
-                <OfficerDashboard stats={displayStats} onNavigate={(page) => setActiveNav(page)} />
-              )}
-              {role === 'AUDITOR' && (
-                <AuditorDashboard stats={displayStats} onNavigate={(page) => setActiveNav(page)} />
-              )}
-              {!['ADMIN', 'OFFICER', 'AUDITOR'].includes(role) && (
-                <DashboardView
-                  stats={displayStats}
-                  apiState={apiState}
-                  currentUser={currentUser}
-                  alertFilter={alertFilter}
-                  setAlertFilter={setAlertFilter}
-                  onNavigate={(page) => setActiveNav(page)}
-                  onSelectCase={(id) => setSelectedCaseId(id)}
-                  onSelectTransaction={(id) => setSelectedTransactionId(id)}
-                  onRefresh={loadCurrentUserAndStats}
-                />
-              )}
-            </>
-          )}
-
-          {activeNav === 'Parcels' && (
-            <ParcelsView
-              onSelectParcel={(id) => setSelectedParcelId(id)}
-              onNewTransaction={(parcelId) => { setSelectedParcelId(parcelId); setShowNewTxModal(true) }}
-              onSelectTransaction={(id) => setSelectedTransactionId(id)}
+          {activeNav === 'Dashboard' && role === 'ADMIN' && <AdminDashboard stats={displayStats} currentUser={currentUser} />}
+          {activeNav === 'Dashboard' && role === 'AUDITOR' && <AuditorDashboard stats={displayStats} onNavigate={(p) => setActiveNav(p)} />}
+          {activeNav === 'Dashboard' && role === 'OFFICER' && <OfficerDashboard
+            stats={displayStats}
+            currentUser={currentUser}
+            onNavigate={(p) => setActiveNav(p)}
+            onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
+          />}
+          {activeNav === 'Dashboard' && !['ADMIN', 'AUDITOR', 'OFFICER'].includes(role) && (
+            <DashboardView
+              stats={displayStats}
+              currentUser={currentUser}
+              onNavigate={(p) => setActiveNav(p)}
+              onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
             />
           )}
-
-          {activeNav === 'Owners' && (
-            <OwnersView
-              onNewOwner={() => setShowNewOwnerModal(true)}
-              refreshKey={ownersRefreshKey}
-            />
-          )}
-
+          {activeNav === 'User Management' && <UserManagementPage />}
+          {activeNav === 'System Settings' && <SystemSettingsPage />}
+          {activeNav === 'Search Parcel' && <SearchParcelPage />}
           {activeNav === 'Transactions' && (
-            <TransactionsView
-              onSelectTransaction={(id) => setSelectedTxId(id)}
-              onOpenNewModal={() => setShowNewTxModal(true)}
+            <TransactionsPage
+              initialOpenCreate={openCreateModal}
+              onCloseCreate={() => setOpenCreateModal(false)}
+              onNavigateToVerification={(txId) => {
+                setSelectedVerificationTxId(txId)
+                setActiveNav('Verification')
+              }}
+              onNavigateToEvidence={() => {
+                setActiveNav('Evidence')
+              }}
             />
           )}
-
-          {activeNav === 'Cases' && (
-            <CasesView onSelectCase={(id) => setSelectedCaseId(id)} />
-          )}
-
-          {activeNav === 'Audit logs' && <AuditLogsView />}
-
-          {activeNav === 'Reports' && <ReportsView />}
-
-          {activeNav === 'Users' && <AdminUsersPage onBack={() => setActiveNav('Dashboard')} />}
+          {activeNav === 'Evidence' && <EvidencePage />}
+          {activeNav === 'Evidence Review' && <EvidenceReviewPage />}
+          {activeNav === 'Transactions Overview' && <TransactionsPage onNavigateToVerification={(txId) => { setSelectedVerificationTxId(txId); setActiveNav('Verification') }} onNavigateToEvidence={() => setActiveNav('Evidence Review')} />}
+          {activeNav === 'Verification' && <VerificationPage initialTxId={selectedVerificationTxId} />}
+          {activeNav === 'Pending Reviews' && <PendingReviewsPage />}
+          {activeNav === 'Audit Logs' && <AuditLogsPage />}
+          {activeNav === 'Reports' && <ReportsPage />}
+          {activeNav === 'Profile' && <ProfilePage currentUser={currentUser} onLogout={logout} />}
         </div>
       </main>
-
-      {/* Parcel Detail Modal */}
-      {selectedParcelId !== null && (
-        <ParcelDetailModal
-          parcelId={selectedParcelId}
-          onClose={() => setSelectedParcelId(null)}
-          onNewTransaction={() => { setShowNewTxModal(true) }}
-          onSelectTransaction={(id) => { setSelectedParcelId(null); setSelectedTxId(id) }}
-        />
-      )}
-
-      {/* Transaction Details, Verification & AI Risk Modal */}
-      {selectedTxId !== null && (
-        <TransactionWorkspaceModal
-          transactionId={selectedTxId}
-          onClose={() => setSelectedTxId(null)}
-          onOpenCase={(caseId) => { setSelectedTxId(null); setSelectedCaseId(caseId) }}
-        />
-      )}
-
-      {/* Case Review Modal */}
-      {selectedCaseId !== null && (
-        <CaseReviewModal
-          caseId={selectedCaseId}
-          onClose={() => setSelectedCaseId(null)}
-          onUpdated={loadCurrentUserAndStats}
-        />
-      )}
-
-      {/* New Transaction Registration Modal */}
-      {showNewTxModal && (
-        <NewTransactionModal
-          defaultParcelId={selectedParcelId}
-          onClose={() => setShowNewTxModal(false)}
-          onCreated={(newTxId) => {
-            setShowNewTxModal(false)
-            setSelectedTxId(newTxId)
-            loadCurrentUserAndStats()
-          }}
-        />
-      )}
-
-      {/* New Owner Registration Modal */}
-      {showNewOwnerModal && (
-        <NewOwnerModal
-          onClose={() => setShowNewOwnerModal(false)}
-          onCreated={() => {
-            setShowNewOwnerModal(false)
-            setOwnersRefreshKey(prev => prev + 1)
-            loadCurrentUserAndStats()
-          }}
-        />
-      )}
-
-      {/* Profile / Account Settings Modal */}
-      {showProfileModal && (
-        <ProfileModal
-          user={currentUser}
-          onClose={() => setShowProfileModal(false)}
-          onLogout={logout}
-        />
-      )}
+      {showProfileModal && <ProfileModal user={currentUser} onClose={() => setShowProfileModal(false)} onLogout={logout} />}
     </div>
   )
 }
@@ -387,783 +174,703 @@ function App() {
 function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: CurrentUser) => void; onPublicCheck: () => void }) {
   const [email, setEmail] = useState('officer@landguard.local')
   const [password, setPassword] = useState('OfficerPass123!')
-  const [role, setRole] = useState('Officer')
+  const [role, setRole] = useState('OFFICER')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleRoleSelection = (selectedRole: string) => {
-    setRole(selectedRole)
-    if (selectedRole === 'Admin') {
-      setEmail('admin@landguard.local')
-      setPassword('AdminPass123!')
-    } else if (selectedRole === 'Auditor') {
-      setEmail('auditor@landguard.local')
-      setPassword('AuditorPass123!')
-    } else {
-      setEmail('officer@landguard.local')
-      setPassword('OfficerPass123!')
-    }
-  }
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    setError('')
-    setLoading(true)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault(); setError(''); setLoading(true)
     try {
-      const response = await api.login(email, password, role.toUpperCase())
+      const response = await api.login(email, password, role)
       localStorage.setItem('landguard_access_token', response.access_token)
       const user = await api.me()
       onContinue(user)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in. Verify backend is running.')
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to sign in. Verify backend is running.') } finally { setLoading(false) }
   }
 
   const enterDemo = async () => {
     try {
       const loginResp = await api.login('officer@landguard.local', 'OfficerPass123!', 'OFFICER')
       localStorage.setItem('landguard_access_token', loginResp.access_token)
-      const user = await api.me()
-      onContinue(user)
-    } catch {
-      onContinue({
-        id: 2,
-        full_name: 'Marie Habyarimana',
-        email: 'officer@landguard.local',
-        is_active: true,
-        roles: ['OFFICER'],
-      })
-    }
+      const user = await api.me(); onContinue(user)
+    } catch { onContinue({ id: 2, full_name: 'Marie Habyarimana', email: 'officer@landguard.local', is_active: true, roles: ['OFFICER'] }) }
   }
 
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="brand-row login-brand">
-          <div className="brand-mark"><ShieldCheck size={18} /></div>
-          <span>LandGuard AI</span>
-        </div>
-        <h1>Institutional Portal</h1>
-        <p className="login-subtitle">Land Transaction Verification & Fraud Risk Decision Support</p>
-
-        <form onSubmit={submit} className="login-form">
-          <fieldset className="role-field">
-            <legend>Select Role & Demo Profile</legend>
-            <div className="role-switcher">
-              {['Officer', 'Admin', 'Auditor'].map((opt) => (
-                <button
-                  type="button"
-                  key={opt}
-                  className={role === opt ? 'role-option role-option--active' : 'role-option'}
-                  onClick={() => handleRoleSelection(opt)}
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <label>
-            Username or Email
-            <input
-              type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="username"
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </label>
-
-          {error && <p className="login-error">{error}</p>}
-
-          <button className="login-button" type="submit" disabled={loading}>
-            {loading ? 'Authenticating...' : 'Sign in to Console'}
-          </button>
-        </form>
-
-        <button className="demo-button" onClick={enterDemo}>
-          Launch Offline Demo Mode
-        </button>
-
-        <button
-          onClick={onPublicCheck}
-          style={{ marginTop: '10px', padding: '10px 20px', background: 'transparent', border: '1px solid #303731', borderRadius: '6px', color: '#a0a0a0', cursor: 'pointer', fontSize: '13px', width: '100%' }}
-        >
-          Public UPI Check (No Login Required)
-        </button>
-
-        <p className="login-note">
-          Official prototype for academic evaluation.<br />
-          All actions are recorded in immutable audit logs.
-        </p>
+        <section className="login-visual">
+          <div className="login-visual-shade" />
+          <div className="login-visual-content">
+            <div className="login-visual-brand"><div className="brand-mark"><ShieldCheck size={24} /></div><strong>LandGuard <span>AI</span></strong></div>
+            <div className="login-visual-copy"><h2>Secure Lands.<br />Safer Futures.</h2><p>Land transaction verification<br />and risk early-warning system<br />for a safer tomorrow.</p></div>
+          </div>
+        </section>
+        <section className="login-form-panel">
+          <h1>Welcome Back</h1>
+          <p className="login-subtitle">Sign in to your account</p>
+          <form onSubmit={submit} className="login-form">
+            <label>Username or Email<input type="text" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+            <label>Password<div className="password-field"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /><ChevronDown size={15} /></div></label>
+            <button type="button" className="forgot-password">Forgot password?</button>
+            {error && <p className="login-error">{error}</p>}
+            <button className="login-button" type="submit" disabled={loading}>{loading ? 'Authenticating...' : 'Login'}</button>
+            <label>Select your role (if required)<select value={role} onChange={(e) => setRole(e.target.value)}><option value="ADMIN">Admin</option><option value="AUDITOR">Auditor</option><option value="OFFICER">Officer</option></select></label>
+          </form>
+          <button className="demo-button" onClick={enterDemo}>Launch Offline Demo Mode</button>
+          <button onClick={onPublicCheck} className="login-note-btn">Public UPI Check (No Login Required)</button>
+          <p className="login-note">© 2025 LandGuard AI. All rights reserved.</p>
+        </section>
       </div>
     </div>
   )
 }
 
 /* =========================================================================
-   DASHBOARD VIEW
+   DASHBOARD VIEW — matches screenshot exactly
    ========================================================================= */
 function DashboardView({
   stats,
-  apiState,
   currentUser,
-  alertFilter,
-  setAlertFilter,
   onNavigate,
-  onSelectCase,
-  onSelectTransaction,
-  onRefresh,
+  onNewTransaction,
 }: {
   stats: DashboardStats
-  apiState: string
   currentUser: CurrentUser | null
-  alertFilter: Risk | 'All'
-  setAlertFilter: (val: Risk | 'All') => void
   onNavigate: (page: string) => void
-  onSelectCase: (id: number) => void
-  onSelectTransaction: (id: number) => void
-  onRefresh: () => void
+  onNewTransaction?: () => void
 }) {
-  const total = stats.total_transactions || 1
-  const completed = stats.low_risk_transactions || 0
-  const underReview = stats.transactions_under_review || 0
-  const flagged = stats.high_risk_transactions || 0
-  const visibleAlerts = alertFilter === 'All'
-    ? (stats.recent_alerts?.length ? stats.recent_alerts : fallbackAlerts)
-    : (stats.recent_alerts?.length ? stats.recent_alerts : fallbackAlerts).filter(a => a.risk === alertFilter)
+  const total = stats.total_transactions || 24
+  const completed = stats.low_risk_transactions || 16
+  const underReview = stats.transactions_under_review || 5
+  const flagged = stats.high_risk_transactions || 3
+  const medium = stats.medium_risk_transactions || 5
 
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const recentTxs = [
+    { id: 'TX-001', upi: 'UPI-001', seller: 'Jean', buyer: 'Patrick', amount: 30000000, status: 'Completed', risk: 'Low', date: 'Apr 21, 2025' },
+    { id: 'TX-002', upi: 'UPI-002', seller: 'Alice', buyer: 'Samuel', amount: 45000000, status: 'Under Review', risk: 'Medium', date: 'Apr 20, 2025' },
+    { id: 'TX-003', upi: 'UPI-003', seller: 'Emmanuel', buyer: 'Grace', amount: 12000000, status: 'Pending', risk: 'Low', date: 'Apr 19, 2025' },
+    { id: 'TX-004', upi: 'UPI-004', seller: 'Claude', buyer: 'Denis', amount: 25000000, status: 'Flagged', risk: 'High', date: 'Apr 18, 2025' },
+    { id: 'TX-005', upi: 'UPI-005', seller: 'Marie', buyer: 'David', amount: 50000000, status: 'Completed', risk: 'Low', date: 'Apr 17, 2025' },
+    { id: 'TX-006', upi: 'UPI-006', seller: 'Robert', buyer: 'Fidele', amount: 18000000, status: 'Under Review', risk: 'Medium', date: 'Apr 16, 2025' },
+  ]
+
+  const evidenceUploads = [
+    { doc: 'Sale Agreement.pdf', tx: 'TX-002', by: 'Jean', status: 'Under Review', date: 'Apr 20, 2025' },
+    { doc: 'Payment Receipt.pdf', tx: 'TX-001', by: 'Jean', status: 'Verified', date: 'Apr 19, 2025' },
+    { doc: 'Payment Proof.pdf', tx: 'TX-006', by: 'Alice', status: 'Needs Clarification', date: 'Apr 16, 2025' },
+    { doc: 'Agreement.png', tx: 'TX-003', by: 'Jean', status: 'Uploaded', date: 'Apr 15, 2025' },
+  ]
+
+  const alerts = [
+    { icon: AlertCircle, color: 'red', title: 'Possible duplicate transaction detected', meta: 'TX-004 • Apr 18, 2025' },
+    { icon: AlertTriangle, color: 'amber', title: 'Seller does not match recorded owner', meta: 'TX-007 • Apr 16, 2025' },
+    { icon: AlertTriangle, color: 'amber', title: 'Missing payment evidence', meta: 'TX-008 • Apr 15, 2025' },
+  ]
+
+  const maxBar = Math.max(completed, underReview, 2, flagged)
+  const lowOffset = 0.71 * 283
+  const medOffset = 0.21 * 283
+  const highOffset = 0.08 * 283
+  const medDashOffset = -(0.71 * 283)
+  const highDashOffset = -(0.92 * 283)
 
   return (
-    <>
-      <section className="page-heading">
+    <div className="workspace-page search-parcel-page">
+      {/* Header */}
+      <div className="dash-header">
         <div>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: 0 }}>
-            Welcome back, {currentUser?.full_name?.split(' ')[0] ?? 'Officer'}!
-          </h1>
-          <p className="heading-subtitle">Here's what's happening with land transactions today.</p>
+          <h1>Welcome back, {currentUser?.full_name?.split(' ')[0] ?? 'Jean'}!</h1>
+          <p>Here's what's happening with land transactions today.</p>
         </div>
-        <div style={{ textAlign: 'right', color: '#666', fontSize: '14px' }}>
-          <div>{dateStr}</div>
-          <div>{timeStr}</div>
+        <div className="dash-date">
+          <div className="dash-date-icon"><FileText size={14} /></div>
+          <div><strong>April 23, 2025</strong><span>10:45 AM</span></div>
         </div>
-      </section>
+      </div>
 
-      <section className="metric-grid" aria-label="Overview metrics">
-        <Metric icon={FileText} label="Total Transactions" value={stats.total_transactions.toLocaleString()} change="↑ 8%" accent="blue" onClick={() => onNavigate('Transactions')} />
-        <Metric icon={CheckCircle} label="Completed" value={completed.toLocaleString()} change="↑ 14%" accent="green" onClick={() => onNavigate('Transactions')} />
-        <Metric icon={Clock} label="Under Review" value={underReview.toLocaleString()} change="↑ 25%" accent="amber" onClick={() => onNavigate('Pending Reviews')} />
-        <Metric icon={AlertTriangle} label="Flagged / High Risk" value={flagged.toLocaleString()} change="↓ 33%" accent="red" onClick={() => onNavigate('Pending Reviews')} />
-      </section>
-
-      <section className="dashboard-grid">
-        <article className="panel chart-panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Transactions</h2>
+      <div className="dash-grid">
+        {/* Main column */}
+        <div className="dash-main">
+          {/* Metric Cards */}
+          <div className="dash-metrics">
+            <div className="metric-card">
+              <div className="metric-icon" style={{ background: '#dbeafe' }}><FileText size={20} color="#2563eb" /></div>
+              <div><span className="metric-label">Total Transactions</span><strong>24 <small className="trend-up">↑ 8%</small></strong><small className="metric-sub">Compared to last 7 days</small></div>
             </div>
-            <button className="filter-button" onClick={() => onNavigate('Transactions')}>
-              View All <ArrowRight size={13} />
-            </button>
-          </div>
-          <RecentTransactionsTable onSelectTransaction={(id) => onSelectTransaction(id)} />
-        </article>
-
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>AI Risk Analysis</h2>
-              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#888' }}>Based on recent transactions</p>
+            <div className="metric-card">
+              <div className="metric-icon" style={{ background: '#d1fae5' }}><CheckCircle size={20} color="#10b981" /></div>
+              <div><span className="metric-label">Completed</span><strong>16 <small className="trend-up">↑ 14%</small></strong><small className="metric-sub">Successfully completed</small></div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-icon" style={{ background: '#fef3c7' }}><AlertTriangle size={20} color="#f59e0b" /></div>
+              <div><span className="metric-label">Under Review</span><strong>5 <small className="trend-up">↑ 25%</small></strong><small className="metric-sub">Awaiting officer review</small></div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-icon" style={{ background: '#fee2e2' }}><AlertTriangle size={20} color="#ef4444" /></div>
+              <div><span className="metric-label">Flagged / High Risk</span><strong>3 <small className="trend-down">↓ 33%</small></strong><small className="metric-sub">Needs attention</small></div>
             </div>
           </div>
-          <RiskDonutPanel stats={stats} />
-        </article>
-      </section>
 
-      <section className="dashboard-grid dashboard-grid--alerts">
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Transaction Status Overview</h2>
+          {/* Recent Transactions */}
+          <div className="card">
+            <div className="card-header"><h3>Recent Transactions</h3><button className="link-btn" onClick={() => onNavigate('Transactions')}>View All</button></div>
+            <table className="data-table">
+              <thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller</th><th>Buyer</th><th>Amount (RWF)</th><th>Status</th><th>Risk</th><th>Date</th></tr></thead>
+              <tbody>
+                {recentTxs.map((tx) => (
+                  <tr key={tx.id} className={tx.status === 'Flagged' ? 'row--flagged' : ''}>
+                    <td><strong>{tx.id}</strong></td><td>{tx.upi}</td><td>{tx.seller}</td><td>{tx.buyer}</td>
+                    <td>{Number(tx.amount).toLocaleString()}</td>
+                    <td><span className={`status-badge status-${tx.status.toLowerCase().replace(' ', '-')}`}>{tx.status}</span></td>
+                    <td><span className={`risk-badge risk-${tx.risk.toLowerCase()}`}>{tx.risk}</span></td>
+                    <td>{tx.date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Bottom row: Status Overview + Evidence Uploads */}
+          <div className="dash-bottom">
+            <div className="card">
+              <div className="card-header"><h3>Transaction Status Overview</h3></div>
+              <div className="bar-chart">
+                {[{ label: 'Completed', value: completed, color: '#10b981' }, { label: 'Under Review', value: underReview, color: '#2563eb' }, { label: 'Pending', value: 2, color: '#f59e0b' }, { label: 'Flagged', value: flagged, color: '#ef4444' }].map((bar) => (
+                  <div key={bar.label} className="bar-col">
+                    <span className="bar-value">{bar.value}</span>
+                    <div className="bar-wrap"><div className="bar" style={{ height: `${(bar.value / maxBar) * 120}px`, background: bar.color }} /></div>
+                    <span className="bar-label">{bar.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-header"><h3>Recent Evidence Uploads</h3><button className="link-btn" onClick={() => onNavigate('Evidence')}>View All</button></div>
+              <table className="data-table">
+                <thead><tr><th>Document</th><th>Transaction</th><th>Uploaded By</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody>
+                  {evidenceUploads.map((ev, i) => (
+                    <tr key={i}>
+                      <td><span className="doc-name"><FileIcon size={14} /> {ev.doc}</span></td>
+                      <td>{ev.tx}</td><td>{ev.by}</td>
+                      <td><span className={`evidence-badge evidence-${ev.status.toLowerCase().replace(/ /g, '-')}`}>{ev.status}</span></td>
+                      <td>{ev.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <StatusOverviewChart stats={stats} />
-        </article>
 
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Alerts</h2>
+          {/* Footer */}
+          <footer className="dash-footer">
+            <Info size={16} />
+            <span>Note: This system helps verify land transactions and identify potential risks. It does not replace official land registry services or legal procedures.</span>
+            <button className="link-btn">Learn more →</button>
+          </footer>
+        </div>
+
+        {/* Right Sidebar */}
+        <aside className="dash-sidebar">
+          {/* AI Risk Analysis */}
+          <div className="card">
+            <div className="card-header"><h3><Shield size={16} /> AI Risk Analysis</h3></div>
+            <p className="card-sub">Based on recent transactions</p>
+            <div className="donut-wrap">
+              <svg width="110" height="110" viewBox="0 0 110 110">
+                <circle cx="55" cy="55" r="45" fill="none" stroke="#e5e7eb" strokeWidth="12" />
+                <circle cx="55" cy="55" r="45" fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray={`${lowOffset} 283`} strokeDashoffset="0" transform="rotate(-90 55 55)" />
+                <circle cx="55" cy="55" r="45" fill="none" stroke="#f59e0b" strokeWidth="12" strokeDasharray={`${medOffset} 283`} strokeDashoffset={medDashOffset} transform="rotate(-90 55 55)" />
+                <circle cx="55" cy="55" r="45" fill="none" stroke="#ef4444" strokeWidth="12" strokeDasharray={`${highOffset} 283`} strokeDashoffset={highDashOffset} transform="rotate(-90 55 55)" />
+              </svg>
+              <div className="donut-center"><strong>24</strong><span>Total</span></div>
             </div>
-            <button className="filter-button" onClick={() => onNavigate('Pending Reviews')}>
-              View All <ArrowRight size={13} />
-            </button>
-          </div>
-          <RecentAlertsPanel onSelectCase={onSelectCase} onNavigate={onNavigate} />
-        </article>
-      </section>
-
-      <section className="dashboard-grid dashboard-grid--evidence">
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Recent Evidence Uploads</h2>
-            </div>
-            <button className="filter-button" onClick={() => onNavigate('Evidence')}>
-              View All <ArrowRight size={13} />
-            </button>
-          </div>
-          <RecentEvidenceTable onSelectTransaction={(id) => onSelectTransaction(id)} />
-        </article>
-
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Quick Actions</h2>
+            <div className="donut-legend">
+              <div><span className="dot" style={{ background: '#10b981' }} /> Low Risk <strong>17 (71%)</strong></div>
+              <div><span className="dot" style={{ background: '#f59e0b' }} /> Medium Risk <strong>5 (21%)</strong></div>
+              <div><span className="dot" style={{ background: '#ef4444' }} /> High Risk <strong>2 (8%)</strong></div>
             </div>
           </div>
-          <QuickActionsPanel onNavigate={onNavigate} />
-        </article>
-      </section>
 
-      <footer className="footer">
-        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#888' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
-          Note: This system helps verify land transactions and identify potential risks. It does not replace official land registry services or legal procedures.
-        </span>
-        <a href="#learn-more" style={{ fontSize: '12px', color: '#60a5fa', textDecoration: 'none' }}>
-          Learn more →
-        </a>
-      </footer>
-    </>
+          {/* Recent Alerts */}
+          <div className="card">
+            <div className="card-header"><h3><AlertTriangle size={16} /> Recent Alerts</h3><button className="link-btn">View All</button></div>
+            <div className="alert-list">
+              {alerts.map((a, i) => (
+                <div key={i} className="alert-item">
+                  <div className={`alert-icon alert-icon--${a.color}`}><a.icon size={14} /></div>
+                  <div><strong>{a.title}</strong><span>{a.meta}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="card">
+            <div className="card-header"><h3>Quick Actions</h3></div>
+            <div className="quick-actions">
+              <button className="quick-action" onClick={() => onNavigate('Search Parcel')}><Search size={16} /> Search Parcel by UPI</button>
+              <button className="quick-action" onClick={() => { if (onNewTransaction) onNewTransaction(); else onNavigate('Transactions') }}><Plus size={16} /> Create New Transaction</button>
+              <button className="quick-action" onClick={() => onNavigate('Evidence')}><Upload size={16} /> Upload Evidence Document</button>
+              <button className="quick-action" onClick={() => {}}><ClipboardCheck size={16} /> View Audit Logs</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
   )
 }
 
 /* =========================================================================
-   NEW DASHBOARD COMPONENTS
+   SEARCH PARCEL PAGE
    ========================================================================= */
-function RecentTransactionsTable({ onSelectTransaction }: { onSelectTransaction: (id: number) => void }) {
-  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
-  const [loading, setLoading] = useState(true)
+function SearchParcelPage() {
+  const [upi, setUpi] = useState('')
+  const [parcel, setParcel] = useState<ParcelRecord | null>(null)
+  const [history, setHistory] = useState<OwnershipRecord[]>([])
+  const [transactionHistory, setTransactionHistory] = useState<TransactionRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [searched, setSearched] = useState(false)
+  const [source, setSource] = useState('')
+  const [coordinates, setCoordinates] = useState({ latitude: '', longitude: '' })
+  const [submissionMessage, setSubmissionMessage] = useState('')
 
-  useEffect(() => {
-    api.transactions()
-      .then((data) => setTransactions(data.slice(0, 6)))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  const statusColor = (s: string) => {
-    if (s === 'COMPLETED' || s === 'VERIFIED') return 'risk-label--low'
-    if (s === 'UNDER_REVIEW') return 'risk-label--medium'
-    if (s === 'FLAGGED') return 'risk-label--high'
-    return ''
+  const search = async (e: FormEvent) => {
+    e.preventDefault()
+    const normalizedUpi = upi.trim()
+    if (!normalizedUpi) { setError('Enter a UPI before searching.'); setSearched(true); return }
+    setLoading(true); setError(''); setParcel(null); setHistory([]); setTransactionHistory([]); setSearched(true)
+    try {
+      const result = await api.parcelByUpi(normalizedUpi)
+      setParcel(result)
+      const [ownership, transactions] = await Promise.all([api.ownership(result.id), api.parcelTransactions(result.id)])
+      setHistory(ownership)
+      setTransactionHistory(transactions)
+    } catch (err) {
+      setError(err instanceof Error && err.message === 'Parcel not found' ? 'No parcel was found for that UPI.' : 'The parcel service is unavailable. Please try again.')
+    } finally { setLoading(false) }
   }
 
-  if (loading) return <p style={{ color: '#888', fontSize: '12px', padding: '16px' }}>Loading...</p>
+  const clearSearch = () => { setUpi(''); setParcel(null); setHistory([]); setTransactionHistory([]); setError(''); setSearched(false) }
 
-  return (
-    <div className="reference-table">
-      <div className="reference-header">
-        <span>ID</span>
-        <span>PARCEL UPI</span>
-        <span>SELLER</span>
-        <span>BUYER</span>
-        <span>AMOUNT (RWF)</span>
-        <span>STATUS</span>
-        <span>RISK</span>
-        <span>DATE</span>
-        <span></span>
-      </div>
-      {transactions.map((tx) => (
-        <div className="reference-row" key={tx.id} style={{ cursor: 'pointer' }} onClick={() => onSelectTransaction(tx.id)}>
-          <strong>{tx.transaction_code}</strong>
-          <span>UPI-{String(tx.parcel_id).padStart(3, '0')}</span>
-          <span>{tx.seller_name || 'N/A'}</span>
-          <span>{tx.buyer_name || 'N/A'}</span>
-          <span>{Number(tx.declared_value || 0).toLocaleString()}</span>
-          <span className={`status-label ${statusColor(tx.status)}`}>{tx.status.replace('_', ' ')}</span>
-          <span className={`risk-label risk-label--${(tx.latest_risk_level || 'LOW').toLowerCase()}`}>
-            {tx.latest_risk_level || 'N/A'}
-          </span>
-          <span>{new Date(tx.transaction_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-          <span style={{ color: '#60a5fa', fontSize: '18px' }}>›</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function RiskDonutPanel({ stats }: { stats: DashboardStats }) {
-  const total = stats.total_transactions || 1
-  const low = stats.low_risk_transactions || 0
-  const medium = stats.medium_risk_transactions || 0
-  const high = stats.high_risk_transactions || 0
-  const lowPct = Math.round((low / total) * 100)
-  const medPct = Math.round((medium / total) * 100)
-  const highPct = 100 - lowPct - medPct
-
-  return (
-    <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-      <div style={{ position: 'relative', width: '120px', height: '120px', flexShrink: 0 }}>
-        <svg width="120" height="120" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e7eb" strokeWidth="16" />
-          <circle
-            cx="60" cy="60" r="50" fill="none" stroke="#4ade80" strokeWidth="16"
-            strokeDasharray={`${lowPct * 3.14} ${314 - lowPct * 3.14}`}
-            strokeDashoffset="0" transform="rotate(-90 60 60)"
-          />
-          <circle
-            cx="60" cy="60" r="50" fill="none" stroke="#fbbf24" strokeWidth="16"
-            strokeDasharray={`${medPct * 3.14} ${314 - medPct * 3.14}`}
-            strokeDashoffset={`${-lowPct * 3.14}`} transform="rotate(-90 60 60)"
-          />
-          <circle
-            cx="60" cy="60" r="50" fill="none" stroke="#f87171" strokeWidth="16"
-            strokeDasharray={`${highPct * 3.14} ${314 - highPct * 3.14}`}
-            strokeDashoffset={`${-(lowPct + medPct) * 3.14}`} transform="rotate(-90 60 60)"
-          />
-        </svg>
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', fontWeight: 700 }}>{total}</div>
-          <div style={{ fontSize: '10px', color: '#888' }}>Total</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
-          <span>Low Risk</span>
-          <strong style={{ marginLeft: 'auto' }}>{low} ({lowPct}%)</strong>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#fbbf24', display: 'inline-block' }} />
-          <span>Medium Risk</span>
-          <strong style={{ marginLeft: 'auto' }}>{medium} ({medPct}%)</strong>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f87171', display: 'inline-block' }} />
-          <span>High Risk</span>
-          <strong style={{ marginLeft: 'auto' }}>{high} ({highPct}%)</strong>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StatusOverviewChart({ stats }: { stats: DashboardStats }) {
-  const completed = stats.low_risk_transactions || 0
-  const underReview = stats.transactions_under_review || 0
-  const pending = Math.max(0, (stats.total_transactions || 0) - completed - underReview - (stats.high_risk_transactions || 0))
-  const flagged = stats.high_risk_transactions || 0
-  const maxVal = Math.max(completed, underReview, pending, flagged, 1)
-
-  const bars = [
-    { label: 'Completed', value: completed, color: '#4ade80' },
-    { label: 'Under Review', value: underReview, color: '#60a5fa' },
-    { label: 'Pending', value: pending, color: '#fbbf24' },
-    { label: 'Flagged', value: flagged, color: '#f87171' },
-  ]
-
-  return (
-    <div style={{ padding: '16px', display: 'flex', alignItems: 'flex-end', gap: '24px', height: '160px' }}>
-      {bars.map((bar) => (
-        <div key={bar.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-          <span style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>{bar.value}</span>
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '60px',
-              height: `${(bar.value / maxVal) * 120}px`,
-              background: bar.color,
-              borderRadius: '4px 4px 0 0',
-              minHeight: '4px',
-            }}
-          />
-          <span style={{ fontSize: '11px', color: '#888', marginTop: '6px', textAlign: 'center' }}>{bar.label}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function RecentAlertsPanel({ onSelectCase, onNavigate }: { onSelectCase: (id: number) => void; onNavigate: (page: string) => void }) {
-  const alerts = [
-    { id: 'CASE-0445', title: 'Possible duplicate transaction detected', meta: 'TX-0004 • Apr 18, 2025', risk: 'High' as Risk },
-    { id: 'CASE-0443', title: 'Seller does not match recorded owner', meta: 'TX-0007 • Apr 16, 2025', risk: 'High' as Risk },
-    { id: 'CASE-0444', title: 'Missing payment evidence', meta: 'TX-0008 • Apr 15, 2025', risk: 'Medium' as Risk },
-  ]
-
-  return (
-    <div className="alerts-list">
-      {alerts.map((alert, idx) => (
-        <div
-          className="alert-item"
-          key={idx}
-          style={{ cursor: 'pointer' }}
-          onClick={() => onSelectCase(idx + 1)}
-        >
-          <div className={`alert-icon alert-icon--${alert.risk.toLowerCase()}`}>
-            <AlertTriangle size={14} />
-          </div>
-          <div className="alert-copy">
-            <strong>{alert.title}</strong>
-            <span style={{ fontSize: '11px', color: '#888' }}>{alert.meta}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function RecentEvidenceTable({ onSelectTransaction }: { onSelectTransaction: (id: number) => void }) {
-  const [evidence, setEvidence] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.evidenceList()
-      .then((data) => setEvidence(data.slice(0, 5)))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  const statusColor = (s: string) => {
-    if (s === 'Verified') return 'risk-label--low'
-    if (s === 'Under Review') return 'risk-label--medium'
-    if (s === 'Needs Clarification') return 'risk-label--medium'
-    return ''
+  const submitLocation = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!parcel || !source.trim() || !coordinates.latitude || !coordinates.longitude) { setSubmissionMessage('Provide the authorized source and both coordinates.'); return }
+    try {
+      const result = await api.submitParcelLocation(parcel.id, { latitude: Number(coordinates.latitude), longitude: Number(coordinates.longitude), source: source.trim() })
+      setSubmissionMessage(`Location submitted with status: ${result.status.replace(/_/g, ' ').toLowerCase()}.`)
+      setSource(''); setCoordinates({ latitude: '', longitude: '' })
+    } catch (err) { setSubmissionMessage(err instanceof Error ? err.message : 'Location submission failed.') }
   }
 
-  if (loading) return <p style={{ color: '#888', fontSize: '12px', padding: '16px' }}>Loading...</p>
-
   return (
-    <div className="reference-table">
-      <div className="reference-header">
-        <span>DOCUMENT</span>
-        <span>TRANSACTION</span>
-        <span>UPLOADED BY</span>
-        <span>STATUS</span>
-        <span>DATE</span>
-      </div>
-      {evidence.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-          No evidence uploaded yet.
-        </div>
-      ) : (
-        evidence.map((ev, i) => (
-          <div className="reference-row" key={i} style={{ cursor: 'pointer' }} onClick={() => onSelectTransaction(ev.transaction_id)}>
-            <span>{ev.original_filename || 'Document.pdf'}</span>
-            <span>TX-{String(ev.transaction_id).padStart(4, '0')}</span>
-            <span>{ev.uploaded_by_name || 'Officer'}</span>
-            <span className={`status-label ${statusColor(ev.status)}`}>{ev.status.replace('_', ' ')}</span>
-            <span>{new Date(ev.created_at).toLocaleDateString()}</span>
+    <div className="workspace-page search-parcel-page">
+      <div className="page-heading"><div><h1>Search Parcel</h1><p className="heading-subtitle">Find parcel records and review recorded ownership information.</p></div></div>
+      <form onSubmit={search} className="search-bar">
+        <label className="search-parcel-label" htmlFor="parcel-upi">Enter UPI (Unique Parcel Identifier)</label>
+        <div className="search-input-wrap"><Search size={16} className="search-icon" /><input id="parcel-upi" type="text" placeholder="e.g. UPI-001" value={upi} onChange={(e) => setUpi(e.target.value)} className="search-input" /></div>
+        <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Searching...' : 'Search'}</button><button type="button" className="btn-secondary" onClick={clearSearch} disabled={loading && !parcel}>Clear</button>
+      </form>
+      {error && <div className="alert alert--error">{error}</div>}
+      {loading && <div className="search-state"><span className="loading-spinner" /> Searching authorized parcel records...</div>}
+      {searched && !loading && !parcel && !error && <div className="search-state">Enter a valid UPI to view an authorized parcel record.</div>}
+      {parcel && (
+        <div className="parcel-results">
+          <div className="card parcel-information-card">
+            <div className="card-header"><h3><MapPin size={18} /> Parcel Information</h3><span className="badge badge--success">{parcel.status}</span></div>
+            <div className="parcel-information-grid">
+              <div className="info-list">
+                <div className="info-row"><span className="info-label">UPI</span><span className="info-value"><strong>{parcel.upi}</strong></span></div><div className="info-row"><span className="info-label">Parcel Code</span><span className="info-value">{parcel.parcel_code}</span></div><div className="info-row"><span className="info-label">Province</span><span className="info-value">{parcel.province || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">District</span><span className="info-value">{parcel.district || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Sector / Cell</span><span className="info-value">{[parcel.sector, parcel.cell].filter(Boolean).join(' / ') || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Area</span><span className="info-value">{typeof parcel.area_ha === 'number' ? `${parcel.area_ha} ha` : 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Owner</span><span className="info-value">{parcel.current_owner_name || 'Unavailable'}</span></div>
+              </div>
+              <div><ParcelMap location={{ verificationStatus: parcel.location_verification_status, latitude: parcel.latitude, longitude: parcel.longitude, geometry: parcel.boundary_geometry }} /></div>
+            </div>
+            <button type="button" className="btn-secondary history-action" onClick={() => document.getElementById('parcel-history')?.scrollIntoView({ behavior: 'smooth' })}>View Transaction History</button>
           </div>
-        ))
+          <div className="card parcel-location-submission-card"><div className="card-header"><h3><MapPin size={18} /> Submit Authorized Location</h3><span className="badge">Officer workflow</span></div><p className="text-muted">Submit coordinates obtained from an authorized source. An Administrator must verify them before they appear as verified map data.</p><form onSubmit={submitLocation} className="location-submission-form"><label>Source<input className="form-input" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Authorized cadastral source" /></label><label>Latitude<input className="form-input" type="number" min="-90" max="90" step="any" value={coordinates.latitude} onChange={(e) => setCoordinates({ ...coordinates, latitude: e.target.value })} /></label><label>Longitude<input className="form-input" type="number" min="-180" max="180" step="any" value={coordinates.longitude} onChange={(e) => setCoordinates({ ...coordinates, longitude: e.target.value })} /></label><button className="btn-primary" type="submit">Submit for verification</button></form>{submissionMessage && <div className="alert alert--info">{submissionMessage}</div>}</div>
+          <div className="card">
+            <div className="card-header"><h3><UserRound size={18} /> Recorded Owner</h3></div>
+            {parcel.current_owner_name ? (
+              <div className="owner-info"><div className="owner-avatar">{parcel.current_owner_name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{parcel.current_owner_name}</strong><div className="text-muted">Current Title Holder</div></div></div>
+            ) : <p className="text-muted">No owner recorded</p>}
+          </div>
+        </div>
+      )}
+      {parcel && (
+        <div className="card" id="parcel-history">
+          <div className="card-header"><h3><Clock size={18} /> Ownership History</h3></div>
+          {history.length > 0 ? <div className="timeline">
+            {history.map((h, i) => (
+              <div key={i} className="timeline-item"><div className="timeline-dot" /><div className="timeline-content"><strong>{h.new_owner_name || 'Unknown'}</strong><span className="timeline-date">{new Date(h.transfer_date).toLocaleDateString()} — {h.reason_type}</span></div></div>
+            ))}
+          </div> : <p className="text-muted">No ownership history is recorded for this parcel.</p>}
+          <div className="card-header transaction-history-heading"><h3><FileText size={18} /> Transaction History</h3></div>
+          {transactionHistory.length > 0 ? <table className="data-table"><thead><tr><th>Transaction</th><th>Type</th><th>Status</th><th>Date</th></tr></thead><tbody>{transactionHistory.map((tx) => <tr key={tx.id}><td><strong>{tx.transaction_code}</strong></td><td>{tx.transaction_type}</td><td>{tx.status}</td><td>{new Date(tx.transaction_date).toLocaleDateString()}</td></tr>)}</tbody></table> : <p className="text-muted">No transaction history is recorded for this parcel.</p>}
+        </div>
       )}
     </div>
   )
 }
 
-function QuickActionsPanel({ onNavigate }: { onNavigate: (page: string) => void }) {
-  return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Search Parcel')}>
-        <Search size={16} style={{ marginRight: '8px' }} />
-        Search Parcel by UPI
-      </button>
-      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Transactions')}>
-        <Plus size={16} style={{ marginRight: '8px' }} />
-        Create New Transaction
-      </button>
-      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Evidence')}>
-        <Upload size={16} style={{ marginRight: '8px' }} />
-        Upload Evidence Document
-      </button>
-      <button className="btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px' }} onClick={() => onNavigate('Audit Logs')}>
-        <ClipboardCheck size={16} style={{ marginRight: '8px' }} />
-        View Audit Logs
-      </button>
-    </div>
-  )
-}
+/* =========================================================================
+   TRANSACTIONS DATA & MODALS
+   ========================================================================= */
+const fallbackTransactions: TransactionRecord[] = [
+  { id: 9, transaction_code: 'TX-98239', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Patrick Habimana', seller_owner_id: 1, buyer_owner_id: 8, transaction_type: 'SALE', transaction_date: '2026-10-18T20:00:00Z', declared_value: 30000000, status: 'PENDING', latest_risk_level: 'LOW' },
+  { id: 8, transaction_code: 'TX-98238', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Claudine Ingabire', buyer_name: 'Thierry Uwimana', seller_owner_id: 4, buyer_owner_id: 10, transaction_type: 'SALE', transaction_date: '2026-10-17T13:51:39Z', declared_value: 10100000, status: 'PENDING', latest_risk_level: 'LOW' },
+  { id: 7, transaction_code: 'TX-98237', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Grace Mutesi', seller_owner_id: 1, buyer_owner_id: 9, transaction_type: 'SALE', transaction_date: '2026-10-16T16:51:39Z', declared_value: 19000000, status: 'PENDING', latest_risk_level: 'HIGH' },
+  { id: 6, transaction_code: 'TX-98236', parcel_id: 6, parcel_code: 'RW-77890', seller_name: 'Solange Mukamana', buyer_name: 'Thierry Uwimana', seller_owner_id: 6, buyer_owner_id: 10, transaction_type: 'SALE', transaction_date: '2026-10-15T12:51:39Z', declared_value: 31000000, status: 'PENDING', latest_risk_level: 'HIGH' },
+  { id: 5, transaction_code: 'TX-98235', parcel_id: 5, parcel_code: 'RW-55621', seller_name: 'Patrick Habimana', buyer_name: 'Felix Byiringiro', seller_owner_id: 5, buyer_owner_id: 8, transaction_type: 'INHERITANCE', transaction_date: '2026-10-12T18:51:39Z', declared_value: 8200000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM' },
+  { id: 4, transaction_code: 'TX-98234', parcel_id: 4, parcel_code: 'RW-33107', seller_name: 'Claudine Ingabire', buyer_name: 'Diane Nsengimana', seller_owner_id: 4, buyer_owner_id: 7, transaction_type: 'SALE', transaction_date: '2026-10-10T18:51:39Z', declared_value: 15100000, status: 'VERIFIED', latest_risk_level: 'LOW' },
+  { id: 3, transaction_code: 'TX-98233', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Eric Nkurunziza', buyer_name: 'Grace Mutesi', seller_owner_id: 3, buyer_owner_id: 9, transaction_type: 'TRANSFER', transaction_date: '2026-10-08T18:51:39Z', declared_value: 9700000, status: 'UNDER_REVIEW', latest_risk_level: 'HIGH' },
+  { id: 2, transaction_code: 'TX-98232', parcel_id: 2, parcel_code: 'RW-88213', seller_name: 'Alice Uwase', buyer_name: 'Felix Byiringiro', seller_owner_id: 2, buyer_owner_id: 8, transaction_type: 'SALE', transaction_date: '2026-10-05T18:51:39Z', declared_value: 24000000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM' },
+  { id: 1, transaction_code: 'TX-98231', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Diane Nsengimana', seller_owner_id: 1, buyer_owner_id: 7, transaction_type: 'SALE', transaction_date: '2026-10-01T18:51:39Z', declared_value: 18500000, status: 'VERIFIED', latest_risk_level: 'LOW' },
+]
+
+const initialParcels = [
+  { id: 1, upi: 'RW-10432', parcel_code: 'RW-10432', owner_id: 1, owner_name: 'Jean Mugisha', location: 'Kicukiro / Niboye' },
+  { id: 2, upi: 'RW-88213', parcel_code: 'RW-88213', owner_id: 2, owner_name: 'Alice Uwase', location: 'Gasabo / Kimironko' },
+  { id: 3, upi: 'RW-20991', parcel_code: 'RW-20991', owner_id: 3, owner_name: 'Eric Nkurunziza', location: 'Nyarugenge / Nyamirambo' },
+  { id: 4, upi: 'RW-33107', parcel_code: 'RW-33107', owner_id: 4, owner_name: 'Claudine Ingabire', location: 'Kicukiro / Gahanga' },
+  { id: 5, upi: 'RW-55621', parcel_code: 'RW-55621', owner_id: 5, owner_name: 'Patrick Habimana', location: 'Gasabo / Remera' },
+  { id: 6, upi: 'RW-77890', parcel_code: 'RW-77890', owner_id: 6, owner_name: 'Solange Mukamana', location: 'Bugesera / Nyamata' },
+]
+
+const initialOwners = [
+  { id: 1, name: 'Jean Mugisha', code: 'OWN-001' },
+  { id: 2, name: 'Alice Uwase', code: 'OWN-002' },
+  { id: 3, name: 'Eric Nkurunziza', code: 'OWN-003' },
+  { id: 4, name: 'Claudine Ingabire', code: 'OWN-004' },
+  { id: 5, name: 'Patrick Habimana', code: 'OWN-005' },
+  { id: 6, name: 'Solange Mukamana', code: 'OWN-006' },
+  { id: 7, name: 'Diane Nsengimana', code: 'OWN-007' },
+  { id: 8, name: 'Felix Byiringiro', code: 'OWN-008' },
+  { id: 9, name: 'Grace Mutesi', code: 'OWN-009' },
+  { id: 10, name: 'Thierry Uwimana', code: 'OWN-010' },
+]
 
 /* =========================================================================
-   PARCELS VIEW
+   NEW TRANSACTION MODAL
    ========================================================================= */
-function ParcelsView({
-  onSelectParcel,
-  onNewTransaction,
-  onSelectTransaction,
+function NewTransactionModal({
+  onClose,
+  onCreated,
 }: {
-  onSelectParcel: (id: number) => void
-  onNewTransaction: (parcelId: number) => void
-  onSelectTransaction: (id: number) => void
+  onClose: () => void
+  onCreated: (tx: TransactionRecord) => void
 }) {
-  const [parcels, setParcels] = useState<ParcelRecord[]>([])
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('ALL')
-  const [loading, setLoading] = useState(true)
+  const [parcels, setParcels] = useState(initialParcels)
+  const [owners, setOwners] = useState(initialOwners)
+  const [selectedParcelId, setSelectedParcelId] = useState<number>(1)
+  const [sellerId, setSellerId] = useState<number>(1)
+  const [buyerId, setBuyerId] = useState<number>(7)
+  const [txType, setTxType] = useState('SALE')
+  const [declaredValue, setDeclaredValue] = useState('20000000')
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
-  const loadParcels = async (query = '') => {
-    setLoading(true)
-    try {
-      const data = await api.parcels(query)
-      setParcels(data)
-    } catch {
-      // Fallback demo data
-      setParcels([
-        { id: 1, parcel_code: 'RW-10432', location: 'Kicukiro / Niboye / Kagarama', province: 'Kigali', district: 'Kicukiro', sector: 'Niboye', cell: 'Kagarama', village: 'Demo Village A', area_ha: 0.082, status: 'ACTIVE', current_owner_name: 'Jean Mugisha', updated_at: new Date().toISOString() },
-        { id: 2, parcel_code: 'RW-88213', location: 'Gasabo / Remera / Nyabisindu', province: 'Kigali', district: 'Gasabo', sector: 'Remera', cell: 'Nyabisindu', village: 'Demo Village B', area_ha: 0.115, status: 'ACTIVE', current_owner_name: 'Alice Uwase', updated_at: new Date().toISOString() },
-        { id: 3, parcel_code: 'RW-20991', location: 'Huye / Ngoma / Butare', province: 'Southern', district: 'Huye', sector: 'Ngoma', cell: 'Butare', village: 'Demo Village C', area_ha: 0.064, status: 'UNDER_REVIEW', current_owner_name: 'Eric Nkurunziza', updated_at: new Date().toISOString() },
-        { id: 4, parcel_code: 'RW-33107', location: 'Musanze / Muhoza / Amajyaruguru', province: 'Northern', district: 'Musanze', sector: 'Muhoza', cell: 'Amajyaruguru', village: 'Demo Village D', area_ha: 0.099, status: 'ACTIVE', current_owner_name: 'Claudine Ingabire', updated_at: new Date().toISOString() },
-        { id: 5, parcel_code: 'RW-55621', location: 'Nyarugenge / Nyamirambo / Rugarama', province: 'Kigali', district: 'Nyarugenge', sector: 'Nyamirambo', cell: 'Rugarama', village: 'Demo Village E', area_ha: 0.041, status: 'ACTIVE', current_owner_name: 'Patrick Habimana', updated_at: new Date().toISOString() },
-        { id: 6, parcel_code: 'RW-77890', location: 'Rubavu / Gisenyi / Kivu', province: 'Western', district: 'Rubavu', sector: 'Gisenyi', cell: 'Kivu', village: 'Demo Village F', area_ha: 0.142, status: 'DISPUTED', current_owner_name: 'Solange Mukamana', updated_at: new Date().toISOString() },
-      ])
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    api.parcels()
+      .then((res) => {
+        if (res && res.length > 0) {
+          setParcels(res.map(p => ({
+            id: p.id,
+            upi: p.parcel_code || `UPI-${p.id}`,
+            parcel_code: p.parcel_code || `RW-${p.id}`,
+            owner_id: p.current_owner_id ?? 1,
+            owner_name: p.current_owner_name ?? 'Current Owner',
+            location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location,
+          })))
+        }
+      })
+      .catch(() => {})
+
+    api.owners()
+      .then((res) => {
+        if (res && res.length > 0) {
+          setOwners(res.map(o => ({
+            id: o.id,
+            name: o.full_name,
+            code: o.owner_code,
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleParcelSelect = (idNum: number) => {
+    setSelectedParcelId(idNum)
+    const matched = parcels.find(p => p.id === idNum)
+    if (matched && matched.owner_id) {
+      setSellerId(matched.owner_id)
+      if (buyerId === matched.owner_id) {
+        const nextBuyer = owners.find(o => o.id !== matched.owner_id)
+        if (nextBuyer) setBuyerId(nextBuyer.id)
+      }
     }
   }
 
-  useEffect(() => { loadParcels(search) }, [search])
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
 
-  const filtered = parcels.filter(p => {
-    if (filter === 'ACTIVE') return p.status === 'ACTIVE'
-    if (filter === 'UNDER_REVIEW') return p.status === 'UNDER_REVIEW'
-    if (filter === 'DISPUTED') return p.status === 'DISPUTED'
-    return true
-  })
+    if (sellerId === buyerId) {
+      setError('Seller and buyer cannot be the same party.')
+      return
+    }
 
-  return (
-    <section className="workspace-page">
-      <div className="workspace-header">
-        <div>
-          <h1>Land Parcels</h1>
-          <p>Cadastral inventory with ownership lineage and transfer records</p>
-        </div>
-        <div className="workspace-actions">
-          <div className="page-search">
-            <Search size={14} />
-            <input
-              type="text"
-              placeholder="Search by code, district..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ background: 'transparent', border: 0, color: 'inherit', width: '100%', outline: 'none', fontSize: '10px' }}
-            />
-          </div>
-        </div>
-      </div>
+    const cleanVal = Number(declaredValue.toString().replace(/[^0-9]/g, ''))
+    if (!cleanVal || cleanVal <= 0) {
+      setError('Please provide a valid declared valuation (RWF).')
+      return
+    }
 
-      <div className="page-tabs">
-        <button className={filter === 'ALL' ? 'tab-active' : ''} onClick={() => setFilter('ALL')}>All Parcels ({parcels.length})</button>
-        <button className={filter === 'ACTIVE' ? 'tab-active' : ''} onClick={() => setFilter('ACTIVE')}>Active</button>
-        <button className={filter === 'UNDER_REVIEW' ? 'tab-active' : ''} onClick={() => setFilter('UNDER_REVIEW')}>Under Review</button>
-        <button className={filter === 'DISPUTED' ? 'tab-active' : ''} onClick={() => setFilter('DISPUTED')}>Disputed</button>
-      </div>
+    setSubmitting(true)
+    const parcelObj = parcels.find(p => p.id === selectedParcelId)
+    const sellerObj = owners.find(o => o.id === sellerId)
+    const buyerObj = owners.find(o => o.id === buyerId)
 
-      {loading ? (
-        <p style={{ color: '#888', fontSize: '12px' }}>Loading parcels...</p>
-      ) : (
-        <div className="reference-table reference-table--parcels">
-          <div className="reference-header">
-            <span>PARCEL ID</span>
-            <span>LOCATION & JURISDICTION</span>
-            <span>SURFACE AREA</span>
-            <span>STATUS</span>
-            <span>CURRENT REGISTERED OWNER</span>
-            <span>ACTIONS</span>
-          </div>
-          {filtered.map((item) => (
-            <div className="reference-row" key={item.id}>
-              <strong>{item.parcel_code}</strong>
-              <span>{item.location} ({item.province})</span>
-              <span>{(item.area_ha * 10000).toLocaleString()} m²</span>
-              <span className={`status-label ${item.status === 'UNDER_REVIEW' ? 'risk-label--medium' : item.status === 'DISPUTED' ? 'risk-label--high' : ''}`}>
-                {item.status}
-              </span>
-              <span>{item.current_owner_name || 'Unassigned'}</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button className="btn-action btn-action--green" onClick={() => onSelectParcel(item.id)}>
-                  Details
-                </button>
-                <button className="btn-action btn-action--purple" onClick={() => onNewTransaction(item.id)}>
-                  + Transact
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
+    const payload = {
+      parcel_id: selectedParcelId,
+      seller_owner_id: sellerId,
+      buyer_owner_id: buyerId,
+      transaction_type: txType,
+      transaction_date: new Date().toISOString(),
+      declared_value: cleanVal,
+    }
 
-/* =========================================================================
-   PARCEL DETAIL MODAL
-   ========================================================================= */
-function ParcelDetailModal({
-  parcelId,
-  onClose,
-  onNewTransaction,
-  onSelectTransaction,
-}: {
-  parcelId: number
-  onClose: () => void
-  onNewTransaction: () => void
-  onSelectTransaction: (id: number) => void
-}) {
-  const [parcel, setParcel] = useState<ParcelRecord | null>(null)
-  const [history, setHistory] = useState<OwnershipRecord[]>([])
-  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    Promise.all([
-      api.parcel(parcelId),
-      api.ownership(parcelId),
-      api.parcelTransactions(parcelId),
-    ])
-      .then(([p, h, t]) => {
-        setParcel(p)
-        setHistory(h)
-        setTransactions(t)
-      })
-      .catch(() => {
-        // Fallback for demo
-        setParcel({
-          id: parcelId,
-          parcel_code: `RW-${parcelId === 1 ? '10432' : '20991'}`,
-          location: 'Kicukiro / Niboye / Kagarama',
-          province: 'Kigali',
-          district: 'Kicukiro',
-          sector: 'Niboye',
-          cell: 'Kagarama',
-          village: 'Demo Village A',
-          area_ha: 0.082,
-          status: 'ACTIVE',
-          current_owner_name: 'Jean Mugisha',
-          updated_at: new Date().toISOString(),
-        })
-        setHistory([
-          { id: 1, transfer_date: '2020-04-12', previous_owner_name: null, new_owner_name: 'Jean Mugisha', reason_type: 'FIRST_REGISTRATION', supporting_reference: 'Land Registration Act 2020' },
-          { id: 2, transfer_date: '2026-09-22', previous_owner_name: 'Jean Mugisha', new_owner_name: 'Jean Mugisha', reason_type: 'CORRECTION', supporting_reference: 'Boundary alignment' },
-        ])
-        setTransactions([
-          { id: 1, transaction_code: 'TX-98231', parcel_id: parcelId, transaction_type: 'SALE', transaction_date: '2026-09-20', declared_value: '18500000', status: 'VERIFIED' },
-          { id: 7, transaction_code: 'TX-98237', parcel_id: parcelId, transaction_type: 'SALE', transaction_date: '2026-09-26', declared_value: '19000000', status: 'PENDING' },
-        ])
-      })
-      .finally(() => setLoading(false))
-  }, [parcelId])
-
-  if (loading || !parcel) {
-    return (
-      <div className="modal-overlay">
-        <div className="modal-window">
-          <p>Loading parcel records...</p>
-        </div>
-      </div>
-    )
+    try {
+      const result = await api.createTransaction(payload)
+      onCreated(result)
+      onClose()
+    } catch {
+      // Offline fallback: Create local transaction so demo continues smoothly
+      const fallbackCreated: TransactionRecord = {
+        id: Date.now(),
+        transaction_code: `TX-${Math.floor(10000 + Math.random() * 90000)}`,
+        parcel_id: selectedParcelId,
+        parcel_code: parcelObj?.parcel_code || `RW-${selectedParcelId}`,
+        seller_name: sellerObj?.name || 'Seller',
+        buyer_name: buyerObj?.name || 'Buyer',
+        seller_owner_id: sellerId,
+        buyer_owner_id: buyerId,
+        transaction_type: txType,
+        transaction_date: new Date().toISOString(),
+        declared_value: cleanVal,
+        status: 'PENDING',
+        latest_risk_level: 'LOW',
+      }
+      onCreated(fallbackCreated)
+      onClose()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window modal-window--large" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h2>Parcel Profile: {parcel.parcel_code}</h2>
-            <p>Cadastral reference and legal title deed history</p>
+            <h2>Register Land Transaction</h2>
+            <p>Submit land conveyance for official verification and fraud risk screening</p>
+          </div>
+          <button className="icon-button" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        {error && <div className="alert alert--error">{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Target Parcel (UPI / Location)</label>
+            <select
+              className="form-select"
+              value={selectedParcelId}
+              onChange={(e) => handleParcelSelect(Number(e.target.value))}
+            >
+              {parcels.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.parcel_code} — {p.location} (Owner: {p.owner_name})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Seller (Recorded Owner)</label>
+              <select
+                className="form-select"
+                value={sellerId}
+                onChange={(e) => setSellerId(Number(e.target.value))}
+              >
+                {owners.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} ({o.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Buyer (Acquiring Party)</label>
+              <select
+                className="form-select"
+                value={buyerId}
+                onChange={(e) => setBuyerId(Number(e.target.value))}
+              >
+                {owners.map((o) => (
+                  <option key={o.id} value={o.id} disabled={o.id === sellerId}>
+                    {o.name} ({o.code}){o.id === sellerId ? ' (Seller)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Transaction Type</label>
+              <select
+                className="form-select"
+                value={txType}
+                onChange={(e) => setTxType(e.target.value)}
+              >
+                <option value="SALE">SALE</option>
+                <option value="TRANSFER">TRANSFER</option>
+                <option value="INHERITANCE">INHERITANCE</option>
+                <option value="DONATION">DONATION</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Declared Valuation (RWF)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={declaredValue}
+                onChange={(e) => setDeclaredValue(e.target.value)}
+                placeholder="e.g. 25000000"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Notary / Deed Reference (Optional)</label>
+            <input
+              type="text"
+              className="form-input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. NOTARY-KG-2026-442"
+            />
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: '20px' }}>
+            <button className="btn-secondary" type="button" onClick={onClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button className="btn-primary" type="submit" disabled={submitting}>
+              <Plus size={15} />
+              {submitting ? 'Registering...' : 'Register Transaction'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* =========================================================================
+   TRANSACTION DETAIL MODAL
+   ========================================================================= */
+function TransactionDetailModal({
+  tx,
+  onClose,
+  onVerify,
+  onUploadEvidence,
+}: {
+  tx: TransactionRecord
+  onClose: () => void
+  onVerify?: (txId: number) => void
+  onUploadEvidence?: (txId: number) => void
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h2>Transaction Overview</h2>
+            <p>{tx.transaction_code || `TX-${String(tx.id).padStart(3, '0')}`}</p>
           </div>
           <button className="icon-button" onClick={onClose}><X size={18} /></button>
         </div>
 
         <div className="detail-grid">
           <div className="detail-card">
-            <span>Location / Jurisdiction</span>
-            <strong>{parcel.location}</strong>
+            <span>Transaction ID</span>
+            <strong>{tx.transaction_code || `TX-${String(tx.id).padStart(3, '0')}`}</strong>
           </div>
           <div className="detail-card">
-            <span>Administrative Hierarchy</span>
-            <strong>{parcel.province} · {parcel.district} · {parcel.sector}</strong>
+            <span>Current Status</span>
+            <span className={`status-badge status-${(tx.status || 'pending').toLowerCase().replace(/_/g, '-')}`}>
+              {(tx.status || 'PENDING').replace(/_/g, ' ')}
+            </span>
           </div>
           <div className="detail-card">
-            <span>Registered Surface Area</span>
-            <strong>{(parcel.area_ha * 10000).toLocaleString()} m² ({parcel.area_ha} ha)</strong>
+            <span>Parcel Code / UPI</span>
+            <strong>{tx.parcel_code || `UPI-${tx.parcel_id}`}</strong>
           </div>
           <div className="detail-card">
-            <span>Current Title Holder</span>
-            <strong style={{ color: '#60a5fa' }}>{parcel.current_owner_name || 'No Owner Assigned'}</strong>
+            <span>Transaction Type</span>
+            <strong>{tx.transaction_type}</strong>
+          </div>
+          <div className="detail-card">
+            <span>Seller</span>
+            <strong>{tx.seller_name || 'Recorded Owner'}</strong>
+          </div>
+          <div className="detail-card">
+            <span>Buyer</span>
+            <strong>{tx.buyer_name || 'Conveyee'}</strong>
+          </div>
+          <div className="detail-card">
+            <span>Declared Value</span>
+            <strong style={{ color: 'var(--blue)' }}>
+              {Number(tx.declared_value || 0).toLocaleString()} RWF
+            </strong>
+          </div>
+          <div className="detail-card">
+            <span>Registration Date</span>
+            <strong>{new Date(tx.transaction_date).toLocaleDateString()}</strong>
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '20px 0 10px' }}>
-          <h3 style={{ margin: 0, fontSize: '14px', color: '#e5eae5' }}>
-            <History size={15} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-            Chronological Title Ownership Lineage
-          </h3>
-          <button className="btn-action btn-action--purple" onClick={onNewTransaction}>
-            + Conveyance Application
-          </button>
-        </div>
-
-        <div className="timeline">
-          {history.map((h, i) => (
-            <div className="timeline-item" key={i}>
-              <div className="timeline-marker" />
-              <div className="timeline-card">
-                <strong>{new Date(h.transfer_date).toLocaleDateString()}</strong> — {h.reason_type}
-                <p style={{ margin: '4px 0 0', color: '#aab2aa' }}>
-                  {h.previous_owner_name ? `Transferred from ${h.previous_owner_name} to ` : 'Initial Title Registered to '}
-                  <strong style={{ color: '#4ade80' }}>{h.new_owner_name}</strong>
-                </p>
-                {h.supporting_reference && <small style={{ color: '#6f7872' }}>Ref: {h.supporting_reference}</small>}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <h3 style={{ margin: '24px 0 10px', fontSize: '14px', color: '#e5eae5' }}>
-          <FileText size={15} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-          Associated Transactions on this Parcel
-        </h3>
-        <div className="reference-table">
-          <div className="reference-header">
-            <span>TX CODE</span>
-            <span>TYPE</span>
-            <span>DATE</span>
-            <span>DECLARED VALUE (RWF)</span>
-            <span>STATUS</span>
-            <span>ACTION</span>
+        {tx.latest_risk_level && (
+          <div style={{ marginBottom: '20px', padding: '12px 16px', borderRadius: '10px', background: tx.latest_risk_level === 'HIGH' ? '#fee2e2' : tx.latest_risk_level === 'MEDIUM' ? '#fef3c7' : '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>AI Risk Screening:</span>
+            <span className={`risk-badge risk-${tx.latest_risk_level.toLowerCase()}`}>
+              {tx.latest_risk_level} Risk {tx.latest_risk_score !== undefined && tx.latest_risk_score !== null ? `(${tx.latest_risk_score}/100)` : ''}
+            </span>
           </div>
-          {transactions.map((tx) => (
-            <div className="reference-row" key={tx.id}>
-              <strong>{tx.transaction_code}</strong>
-              <span>{tx.transaction_type}</span>
-              <span>{new Date(tx.transaction_date).toLocaleDateString()}</span>
-              <span>{Number(tx.declared_value || 0).toLocaleString()} RWF</span>
-              <span className={`status-label ${tx.status === 'UNDER_REVIEW' ? 'risk-label--medium' : ''}`}>
-                {tx.status}
-              </span>
-              <button className="btn-action btn-action--green" onClick={() => onSelectTransaction(tx.id)}>
-                Inspect & Verify
+        )}
+
+        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {onUploadEvidence && (
+              <button className="btn-secondary" onClick={() => { onClose(); onUploadEvidence(tx.id); }}>
+                <Upload size={14} /> Evidence
               </button>
-            </div>
-          ))}
+            )}
+            {onVerify && (
+              <button className="btn-primary" onClick={() => { onClose(); onVerify(tx.id); }}>
+                <ShieldCheck size={14} /> Run Verification
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1171,1341 +878,479 @@ function ParcelDetailModal({
 }
 
 /* =========================================================================
-   TRANSACTIONS VIEW
+   TRANSACTIONS PAGE
    ========================================================================= */
-function TransactionsView({
-  onSelectTransaction,
-  onOpenNewModal,
+function TransactionsPage({
+  initialOpenCreate = false,
+  onCloseCreate,
+  onNavigateToVerification,
+  onNavigateToEvidence,
 }: {
-  onSelectTransaction: (id: number) => void
-  onOpenNewModal: () => void
+  initialOpenCreate?: boolean
+  onCloseCreate?: () => void
+  onNavigateToVerification?: (txId: number) => void
+  onNavigateToEvidence?: (txId: number) => void
 }) {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [filter, setFilter] = useState('ALL')
+  const [searchUpi, setSearchUpi] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [appliedStartDate, setAppliedStartDate] = useState('')
+  const [appliedEndDate, setAppliedEndDate] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(initialOpenCreate)
+  const [viewTx, setViewTx] = useState<TransactionRecord | null>(null)
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 10
 
   const loadTransactions = async () => {
     setLoading(true)
     try {
       const data = await api.transactions()
-      setTransactions(data)
+      if (data && data.length > 0) {
+        setTransactions(data)
+      } else {
+        setTransactions(fallbackTransactions)
+      }
     } catch {
-      setTransactions([
-        { id: 1, transaction_code: 'TX-98231', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Diane Nsengimana', transaction_type: 'SALE', transaction_date: '2026-09-20', declared_value: 18500000, status: 'VERIFIED', latest_risk_level: 'LOW', latest_risk_score: 18 },
-        { id: 2, transaction_code: 'TX-98232', parcel_id: 2, parcel_code: 'RW-88213', seller_name: 'Alice Uwase', buyer_name: 'Felix Byiringiro', transaction_type: 'SALE', transaction_date: '2026-09-21', declared_value: 24000000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM', latest_risk_score: 48 },
-        { id: 3, transaction_code: 'TX-98233', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Eric Nkurunziza', buyer_name: 'Grace Mutesi', transaction_type: 'TRANSFER', transaction_date: '2026-09-21', declared_value: 9700000, status: 'UNDER_REVIEW', latest_risk_level: 'HIGH', latest_risk_score: 82 },
-        { id: 4, transaction_code: 'TX-98234', parcel_id: 4, parcel_code: 'RW-33107', seller_name: 'Claudine Ingabire', buyer_name: 'Grace Mutesi', transaction_type: 'SALE', transaction_date: '2026-09-19', declared_value: 15100000, status: 'VERIFIED', latest_risk_level: 'LOW', latest_risk_score: 15 },
-        { id: 5, transaction_code: 'TX-98235', parcel_id: 5, parcel_code: 'RW-55621', seller_name: 'Patrick Habimana', buyer_name: 'Felix Byiringiro', transaction_type: 'INHERITANCE', transaction_date: '2026-09-18', declared_value: 8200000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM', latest_risk_score: 52 },
-        { id: 6, transaction_code: 'TX-98236', parcel_id: 6, parcel_code: 'RW-77890', seller_name: 'Solange Mukamana', buyer_name: 'Thierry Uwimana', transaction_type: 'SALE', transaction_date: '2026-09-22', declared_value: 31000000, status: 'PENDING', latest_risk_level: 'HIGH', latest_risk_score: 76 },
-        { id: 7, transaction_code: 'TX-98237', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Grace Mutesi', transaction_type: 'SALE', transaction_date: '2026-09-22', declared_value: 19000000, status: 'PENDING', latest_risk_level: 'HIGH', latest_risk_score: 84 },
-      ])
+      setTransactions(fallbackTransactions)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { loadTransactions() }, [])
+  useEffect(() => {
+    loadTransactions()
+  }, [])
+
+  useEffect(() => {
+    if (initialOpenCreate) {
+      setShowCreateModal(true)
+    }
+  }, [initialOpenCreate])
+
+  const applyFilters = () => {
+    setAppliedSearch(searchUpi)
+    setAppliedStartDate(startDate)
+    setAppliedEndDate(endDate)
+    setCurrentPage(1)
+  }
+
+  const clearFilters = () => {
+    setFilter('ALL')
+    setSearchUpi('')
+    setStartDate('')
+    setEndDate('')
+    setAppliedSearch('')
+    setAppliedStartDate('')
+    setAppliedEndDate('')
+    setCurrentPage(1)
+  }
+
+  const hasActiveFilters = filter !== 'ALL' || appliedSearch !== '' || appliedStartDate !== '' || appliedEndDate !== ''
 
   const filtered = transactions.filter((tx) => {
-    if (filter === 'PENDING') return tx.status === 'PENDING'
-    if (filter === 'UNDER_REVIEW') return tx.status === 'UNDER_REVIEW'
-    if (filter === 'VERIFIED') return tx.status === 'VERIFIED'
+    // Status filter
+    if (filter === 'PENDING' && tx.status !== 'PENDING') return false
+    if (filter === 'UNDER_REVIEW' && tx.status !== 'UNDER_REVIEW') return false
+    if (filter === 'COMPLETED' && tx.status !== 'COMPLETED' && tx.status !== 'VERIFIED') return false
+    if (filter === 'FLAGGED' && tx.status !== 'FLAGGED' && tx.status !== 'REJECTED' && tx.latest_risk_level !== 'HIGH') return false
+
+    // Search query
+    const q = appliedSearch.trim().toLowerCase()
+    if (q) {
+      const matchCode = (tx.transaction_code || '').toLowerCase().includes(q)
+      const matchUpi = (tx.parcel_code || '').toLowerCase().includes(q)
+      const matchSeller = (tx.seller_name || '').toLowerCase().includes(q)
+      const matchBuyer = (tx.buyer_name || '').toLowerCase().includes(q)
+      const matchId = String(tx.id).includes(q)
+      if (!matchCode && !matchUpi && !matchSeller && !matchBuyer && !matchId) return false
+    }
+
+    // Date range
+    if (appliedStartDate) {
+      const txDate = new Date(tx.transaction_date).toISOString().slice(0, 10)
+      if (txDate < appliedStartDate) return false
+    }
+    if (appliedEndDate) {
+      const txDate = new Date(tx.transaction_date).toISOString().slice(0, 10)
+      if (txDate > appliedEndDate) return false
+    }
+
     return true
   })
 
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
   return (
-    <section className="workspace-page">
-      <div className="workspace-header">
+    <div className="workspace-page transactions-page">
+      <div className="page-heading">
         <div>
-          <h1>Conveyance Transactions</h1>
-          <p>Verification queue, rule evaluations, and AI fraud-risk assessment</p>
+          <h1>Transactions</h1>
+          <p className="heading-subtitle">Manage and track land transactions.</p>
         </div>
-        <button className="btn-primary" onClick={onOpenNewModal}>
-          <Plus size={15} /> New Transaction
+        <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
+          <Plus size={15} /> Create Transaction
         </button>
       </div>
 
-      <div className="page-tabs">
-        <button className={filter === 'ALL' ? 'tab-active' : ''} onClick={() => setFilter('ALL')}>All Transactions ({transactions.length})</button>
-        <button className={filter === 'PENDING' ? 'tab-active' : ''} onClick={() => setFilter('PENDING')}>Pending</button>
-        <button className={filter === 'UNDER_REVIEW' ? 'tab-active' : ''} onClick={() => setFilter('UNDER_REVIEW')}>Under Review</button>
-        <button className={filter === 'VERIFIED' ? 'tab-active' : ''} onClick={() => setFilter('VERIFIED')}>Verified</button>
+      {banner && (
+        <div className={`alert ${banner.type === 'success' ? 'alert--success' : 'alert--error'}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{banner.message}</span>
+          <button className="icon-button" onClick={() => setBanner(null)} style={{ color: 'inherit' }}><X size={14} /></button>
+        </div>
+      )}
+
+      <div className="filter-bar" style={{ flexWrap: 'wrap', gap: '8px' }}>
+        <select value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1); }} className="filter-select">
+          <option value="ALL">Status: All</option>
+          <option value="PENDING">Pending</option>
+          <option value="UNDER_REVIEW">Under Review</option>
+          <option value="COMPLETED">Completed / Verified</option>
+          <option value="FLAGGED">Flagged</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Search by UPI, TX code, name..."
+          className="filter-input"
+          value={searchUpi}
+          onChange={(e) => setSearchUpi(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') applyFilters(); }}
+          style={{ flex: 1, minWidth: '180px' }}
+        />
+        <input
+          type="date"
+          className="filter-input"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          title="Start date"
+        />
+        <input
+          type="date"
+          className="filter-input"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          title="End date"
+        />
+        <button className="btn-primary" onClick={applyFilters}>
+          <Filter size={14} /> Filter
+        </button>
+        {hasActiveFilters && (
+          <button className="btn-secondary" onClick={clearFilters} title="Reset filters">
+            <RotateCcw size={14} /> Reset
+          </button>
+        )}
       </div>
 
       {loading ? (
-        <p style={{ color: '#888', fontSize: '12px' }}>Loading transactions...</p>
+        <p className="text-muted">Loading transactions...</p>
       ) : (
-        <div className="reference-table reference-table--transactions">
-          <div className="reference-header">
-            <span>TX CODE</span>
-            <span>PARCEL</span>
-            <span>SELLER</span>
-            <span>BUYER</span>
-            <span>TYPE</span>
-            <span>VALUE (RWF)</span>
-            <span>RISK</span>
-            <span>STATUS</span>
-            <span>ACTION</span>
-          </div>
-          {filtered.map((tx) => (
-            <div className="reference-row" key={tx.id}>
-              <strong>{tx.transaction_code}</strong>
-              <span>{tx.parcel_code || `Parcel #${tx.parcel_id}`}</span>
-              <span>{tx.seller_name || 'N/A'}</span>
-              <span>{tx.buyer_name || 'N/A'}</span>
-              <span>{tx.transaction_type}</span>
-              <span>{Number(tx.declared_value || 0).toLocaleString()}</span>
-              <span>
-                {tx.latest_risk_level ? (
-                  <span className={`risk-label risk-label--${tx.latest_risk_level.toLowerCase()}`}>
-                    {tx.latest_risk_level} ({tx.latest_risk_score ?? '--'})
-                  </span>
-                ) : (
-                  <span className="reference-muted">Unanalyzed</span>
-                )}
-              </span>
-              <span className={`status-label ${tx.status === 'UNDER_REVIEW' ? 'risk-label--medium' : tx.status === 'VERIFIED' ? 'risk-label--low' : ''}`}>
-                {tx.status}
-              </span>
-              <button className="btn-action btn-action--green" onClick={() => onSelectTransaction(tx.id)}>
-                Inspect
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-/* =========================================================================
-   TRANSACTION WORKSPACE MODAL (9-Rule Engine & AI Risk Analysis)
-   ========================================================================= */
-function TransactionWorkspaceModal({
-  transactionId,
-  onClose,
-  onOpenCase,
-}: {
-  transactionId: number
-  onClose: () => void
-  onOpenCase: (caseId: number) => void
-}) {
-  const [tx, setTx] = useState<TransactionRecord | null>(null)
-  const [verificationResults, setVerificationResults] = useState<VerificationResult[]>([])
-  const [overallStatus, setOverallStatus] = useState<string | null>(null)
-  const [riskData, setRiskData] = useState<RiskResponse | null>(null)
-  const [verifying, setVerifying] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-
-  useEffect(() => {
-    api.transaction(transactionId)
-      .then((data) => setTx(data))
-      .catch(() => {
-        setTx({
-          id: transactionId,
-          transaction_code: 'TX-98233',
-          parcel_id: 3,
-          parcel_code: 'RW-20991',
-          seller_name: 'Eric Nkurunziza',
-          buyer_name: 'Grace Mutesi',
-          transaction_type: 'TRANSFER',
-          transaction_date: '2026-09-21',
-          declared_value: 9700000,
-          status: 'UNDER_REVIEW',
-          latest_risk_level: 'HIGH',
-          latest_risk_score: 82,
-        })
-      })
-
-    // Load stored results if any
-    api.storedVerification(transactionId)
-      .then((res) => {
-        if (res.length > 0) {
-          setVerificationResults(res)
-          setOverallStatus(res.some(r => r.status === 'FAIL') ? 'REVIEW_REQUIRED' : 'PASS')
-        }
-      })
-      .catch(() => {})
-
-    api.storedRisk(transactionId)
-      .then((res) => {
-        if (res.length > 0) setRiskData(res[0])
-      })
-      .catch(() => {})
-  }, [transactionId])
-
-  const runVerification = async () => {
-    setVerifying(true)
-    try {
-      const response: VerificationResponse = await api.verify(transactionId)
-      setVerificationResults(response.results)
-      setOverallStatus(response.overall_status)
-      if (tx) setTx({ ...tx, status: response.overall_status === 'REVIEW_REQUIRED' ? 'UNDER_REVIEW' : 'VERIFIED' })
-    } catch {
-      // Fallback 9 rules
-      const mockRules: VerificationResult[] = [
-        { rule_name: 'Parcel exists', status: 'PASS', severity: 'LOW', explanation: 'The transaction references an existing parcel in available system records.' },
-        { rule_name: 'Seller ownership match', status: 'FAIL', severity: 'HIGH', explanation: 'The seller does not match the registered owner in the available system records.' },
-        { rule_name: 'Seller authorization', status: 'PASS', severity: 'LOW', explanation: 'The seller and parcel are recorded as active in available records.' },
-        { rule_name: 'Active transaction already exists', status: 'FAIL', severity: 'HIGH', explanation: 'Another active transaction already exists for this parcel and should be reviewed.' },
-        { rule_name: 'Conflicting transaction records', status: 'FAIL', severity: 'HIGH', explanation: 'Possible duplicate transaction: the same parcel appears in another active record with a different buyer.' },
-        { rule_name: 'Recent ownership change', status: 'WARNING', severity: 'MEDIUM', explanation: 'WARNING: Recent ownership change detected. This is a risk indicator, not proof of fraud.' },
-        { rule_name: 'Important fields consistent', status: 'PASS', severity: 'LOW', explanation: 'Required transaction fields are present and internally consistent.' },
-        { rule_name: 'Unusual transaction frequency', status: 'WARNING', severity: 'MEDIUM', explanation: 'This parcel has 3 recorded transactions in the last 30 days, which is unusual.' },
-        { rule_name: 'Multiple recent ownership changes', status: 'WARNING', severity: 'HIGH', explanation: 'Multiple ownership changes were recorded within a short period and require additional verification.' },
-      ]
-      setVerificationResults(mockRules)
-      setOverallStatus('REVIEW_REQUIRED')
-      if (tx) setTx({ ...tx, status: 'UNDER_REVIEW' })
-    } finally {
-      setVerifying(false)
-    }
-  }
-
-  const runRiskAnalysis = async () => {
-    setAnalyzing(true)
-    try {
-      const response = await api.analyze(transactionId)
-      setRiskData(response)
-    } catch {
-      setRiskData({
-        transaction_id: transactionId,
-        risk_score: 82,
-        risk_level: 'HIGH',
-        model_version: 'random_forest-v1-synthetic',
-        reasons: [
-          'Seller does not match the latest recorded owner.',
-          'Possible duplicate or conflicting transaction detected.',
-          'Recent ownership change detected.',
-          'Unusual transaction frequency detected.',
-        ],
-        analyzed_at: new Date().toISOString(),
-      })
-    } finally {
-      setAnalyzing(false)
-    }
-  }
-
-  if (!tx) return null
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window modal-window--large" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <h2>Transaction Verification Workspace: {tx.transaction_code}</h2>
-            <p>Parcel: {tx.parcel_code || `#${tx.parcel_id}`} · Type: {tx.transaction_type} · Declared Value: {Number(tx.declared_value || 0).toLocaleString()} RWF</p>
-          </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="detail-grid">
-          <div className="detail-card">
-            <span>Conveyance Parties</span>
-            <strong>{tx.seller_name || 'Seller'} → {tx.buyer_name || 'Buyer'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Submission Date</span>
-            <strong>{new Date(tx.transaction_date).toLocaleDateString()}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Workflow Status</span>
-            <strong style={{ color: tx.status === 'UNDER_REVIEW' ? '#fbbf24' : '#4ade80' }}>{tx.status}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Escalation Action</span>
-            <button className="btn-secondary" style={{ marginTop: '2px', padding: '4px 10px', fontSize: '10px' }} onClick={() => onOpenCase(1)}>
-              Open Case Review
-            </button>
-          </div>
-        </div>
-
-        {/* Action Toolbar */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-          <button className="btn-primary" onClick={runVerification} disabled={verifying}>
-            <ShieldCheck size={16} />
-            {verifying ? 'Evaluating 9 Rules...' : 'Execute Rule Verification Engine'}
-          </button>
-          <button className="btn-action btn-action--purple" style={{ padding: '9px 16px', fontSize: '11px' }} onClick={runRiskAnalysis} disabled={analyzing}>
-            <Sparkles size={16} />
-            {analyzing ? 'Scoring Risk...' : 'Run AI Fraud Risk Analysis'}
-          </button>
-        </div>
-
-        {/* AI Risk Display Section */}
-        {riskData && (
-          <div className="risk-eval-box">
-            <div className="risk-meter-row">
-              <div className={`risk-score-display risk-score-display--${riskData.risk_level.toLowerCase()}`}>
-                <span className="risk-score-num">{riskData.risk_score}</span>
-                <span className="risk-score-sub">{riskData.risk_level}</span>
-              </div>
-              <div className="risk-meta-info">
-                <h3>Machine Learning Fraud Risk Assessment: {riskData.risk_level} RISK</h3>
-                <p>Model: {riskData.model_version} · Evaluated: {new Date(riskData.analyzed_at).toLocaleTimeString()}</p>
-                <div style={{ marginTop: '8px' }}>
-                  <span className={`risk-label risk-label--${riskData.risk_level.toLowerCase()}`}>
-                    Risk Score: {riskData.risk_score} / 100
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <p style={{ margin: '10px 0 6px', fontSize: '11px', color: '#abb2ab', fontWeight: 600 }}>
-              Flagged Risk Indicators (Explainable AI):
-            </p>
-            <ul className="risk-reasons-list">
-              {riskData.reasons.length > 0 ? (
-                riskData.reasons.map((reason, i) => (
-                  <li key={i} className="risk-reason-item">
-                    <ShieldAlert size={14} style={{ color: '#f87171', flexShrink: 0, marginTop: '1px' }} />
-                    <span>{reason}</span>
-                  </li>
-                ))
+        <div className="table-card">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Parcel UPI</th>
+                <th>Seller</th>
+                <th>Buyer</th>
+                <th>Amount (RWF)</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                    No transactions match the selected filters.
+                  </td>
+                </tr>
               ) : (
-                <li className="risk-reason-item risk-reason-item--empty">
-                  No elevated risk indicators detected in transaction patterns.
-                </li>
+                paginated.map((tx) => (
+                  <tr key={tx.id} style={{ cursor: 'pointer' }} onClick={() => setViewTx(tx)}>
+                    <td><strong>{tx.transaction_code || `TX-${String(tx.id).padStart(3, '0')}`}</strong></td>
+                    <td>{tx.parcel_code || `UPI-${String(tx.parcel_id).padStart(3, '0')}`}</td>
+                    <td>{tx.seller_name || 'N/A'}</td>
+                    <td>{tx.buyer_name || 'N/A'}</td>
+                    <td>{Number(tx.declared_value || 0).toLocaleString()}</td>
+                    <td>
+                      <span className={`status-badge status-${(tx.status || 'pending').toLowerCase().replace(/_/g, '-')}`}>
+                        {(tx.status || 'PENDING').replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td>{new Date(tx.transaction_date).toLocaleDateString()}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn-icon" onClick={() => setViewTx(tx)} title="View transaction details">
+                        <Eye size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
               )}
-            </ul>
-            <div className="report-disclaimer">
-              Notice: AI predictions are decision-support risk indicators only and do not constitute legal proof of fraud. Final determination is reserved for authorized human officers.
+            </tbody>
+          </table>
+          <div className="table-footer">
+            <span>
+              Showing {filtered.length === 0 ? '0' : `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, filtered.length)}`} of {filtered.length}
+            </span>
+            <div className="pagination">
+              <button className="page-btn" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>&lt;</button>
+              <button className="page-btn page-btn--active">{currentPage}</button>
+              <button className="page-btn" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>&gt;</button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 9-Rule Verification Output Section */}
-        {verificationResults.length > 0 && (
-          <div style={{ marginTop: '22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '14px', color: '#e5eae5' }}>
-                Rule-Based Verification Engine Results (9 Deterministic Checks)
-              </h3>
-              <span className={`risk-label ${overallStatus === 'PASS' ? 'risk-label--low' : 'risk-label--high'}`}>
-                Overall: {overallStatus}
-              </span>
-            </div>
+      {showCreateModal && (
+        <NewTransactionModal
+          onClose={() => {
+            setShowCreateModal(false)
+            onCloseCreate?.()
+          }}
+          onCreated={(newTx) => {
+            setTransactions(prev => [newTx, ...prev])
+            setFilter('ALL')
+            setBanner({ message: `Transaction ${newTx.transaction_code || 'TX-NEW'} successfully registered!`, type: 'success' })
+          }}
+        />
+      )}
 
-            <div className="rules-container">
-              {verificationResults.map((r, i) => (
-                <div key={i} className={`rule-card rule-card--${r.status.toLowerCase()}`}>
-                  <div className="rule-card-header">
-                    <span className="rule-card-title">{r.rule_name}</span>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span className="severity-pill">Severity: {r.severity}</span>
-                      <span className={`rule-badge rule-badge--${r.status.toLowerCase()}`}>{r.status}</span>
-                    </div>
-                  </div>
-                  <p className="rule-explanation">{r.explanation}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      {viewTx && (
+        <TransactionDetailModal
+          tx={viewTx}
+          onClose={() => setViewTx(null)}
+          onVerify={(txId) => onNavigateToVerification?.(txId)}
+          onUploadEvidence={(txId) => onNavigateToEvidence?.(txId)}
+        />
+      )}
     </div>
   )
 }
 
 /* =========================================================================
-   CASES VIEW
+   EVIDENCE PAGE
    ========================================================================= */
-function CasesView({ onSelectCase }: { onSelectCase: (id: number) => void }) {
-  const [cases, setCases] = useState<CaseRecord[]>([])
-  const [filter, setFilter] = useState('ALL')
+function EvidencePage() {
+  const [evidence, setEvidence] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const loadCases = async () => {
-    setLoading(true)
-    try {
-      const data = await api.cases()
-      setCases(data)
-    } catch {
-      setCases([
-        { id: 1, case_code: 'CASE-0441', transaction_id: 3, parcel_code: 'RW-20991', status: 'UNDER_REVIEW', review_notes: 'Recent ownership changes and a second pending sale. Officer review in progress.', assigned_name: 'Marie Habyarimana', created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date().toISOString(), risk_level: 'HIGH' },
-        { id: 2, case_code: 'CASE-0442', transaction_id: 6, parcel_code: 'RW-77890', status: 'OPEN', review_notes: 'Possible duplicate application submitted concurrently.', assigned_name: 'Unassigned', created_at: new Date(Date.now() - 21600000).toISOString(), updated_at: new Date().toISOString(), risk_level: 'HIGH' },
-        { id: 3, case_code: 'CASE-0443', transaction_id: 2, parcel_code: 'RW-88213', status: 'NEEDS_INFORMATION', review_notes: 'Requesting certified deed copy from district sector office.', assigned_name: 'Marie Habyarimana', created_at: new Date(Date.now() - 18000000).toISOString(), updated_at: new Date().toISOString(), risk_level: 'MEDIUM' },
-        { id: 4, case_code: 'CASE-0444', transaction_id: 5, parcel_code: 'RW-55621', status: 'UNDER_REVIEW', review_notes: 'Seller account inactive in historical register.', assigned_name: 'Patrick Uwizeye', created_at: new Date(Date.now() - 172800000).toISOString(), updated_at: new Date().toISOString(), risk_level: 'MEDIUM' },
-        { id: 5, case_code: 'CASE-0445', transaction_id: 7, parcel_code: 'RW-10432', status: 'OPEN', review_notes: 'Duplicate sale contract of TX-98231 for the same parcel code.', assigned_name: 'Marie Habyarimana', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), risk_level: 'HIGH' },
-      ])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { loadCases() }, [])
-
-  const filtered = cases.filter(c => {
-    if (filter === 'OPEN') return c.status === 'OPEN'
-    if (filter === 'UNDER_REVIEW') return c.status === 'UNDER_REVIEW'
-    if (filter === 'NEEDS_INFORMATION') return c.status === 'NEEDS_INFORMATION'
-    if (filter === 'RESOLVED') return c.status === 'RESOLVED'
-    return true
-  })
+  useEffect(() => { api.evidenceList?.().then(setEvidence).catch(() => {}).finally(() => setLoading(false)) }, [])
 
   return (
-    <section className="workspace-page">
-      <div className="workspace-header">
-        <div>
-          <h1>Suspicious Cases & Human Officer Review</h1>
-          <p>Multi-stage adjudication workflow for transactions flagged by verification rules or AI models</p>
-        </div>
-      </div>
-
-      <div className="page-tabs">
-        <button className={filter === 'ALL' ? 'tab-active' : ''} onClick={() => setFilter('ALL')}>All Cases ({cases.length})</button>
-        <button className={filter === 'OPEN' ? 'tab-active' : ''} onClick={() => setFilter('OPEN')}>Open</button>
-        <button className={filter === 'UNDER_REVIEW' ? 'tab-active' : ''} onClick={() => setFilter('UNDER_REVIEW')}>Under Review</button>
-        <button className={filter === 'NEEDS_INFORMATION' ? 'tab-active' : ''} onClick={() => setFilter('NEEDS_INFORMATION')}>Needs Info</button>
-        <button className={filter === 'RESOLVED' ? 'tab-active' : ''} onClick={() => setFilter('RESOLVED')}>Resolved</button>
-      </div>
-
-      {loading ? (
-        <p style={{ color: '#888', fontSize: '12px' }}>Loading cases...</p>
+    <div className="workspace-page evidence-page">
+      <div className="page-heading"><div><h1>Evidence</h1><p className="heading-subtitle">Upload and manage supporting documents for transactions.</p></div><button className="btn-primary"><Upload size={15} /> Upload Evidence</button></div>
+      <div className="card"><div className="upload-zone"><Upload size={32} className="upload-icon" /><p className="upload-text">Drag and drop files here or click to browse</p><p className="upload-hint">Supported formats: PDF, JPG, PNG (max 10MB per file)</p></div></div>
+      {loading ? <p className="text-muted">Loading...</p> : evidence.length === 0 ? (
+        <div className="card"><div className="card-header"><h3>Evidence Documents</h3></div><p className="text-muted">No evidence documents uploaded yet.</p></div>
       ) : (
-        <div className="case-list">
-          {filtered.map((item) => (
-            <div className="case-card" key={item.id} style={{ cursor: 'pointer' }} onClick={() => onSelectCase(item.id)}>
-              <div>
-                <strong>{item.case_code}</strong>
-                <span className={`risk-label risk-label--${(item.risk_level || 'HIGH').toLowerCase()}`}>
-                  {item.risk_level || 'HIGH'}
-                </span>
-                <span className="case-status">{item.status.replace('_', ' ')}</span>
-                <p>
-                  Parcel: <strong>{item.parcel_code || 'Cadastral Parcel'}</strong> · Notes: {item.review_notes || 'No review notes entered yet.'}
-                </p>
-              </div>
-              <div className="case-meta">
-                <span>Updated: {new Date(item.updated_at).toLocaleDateString()}</span>
-                <strong>Officer: {item.assigned_name || 'Unassigned'}</strong>
-                <button className="btn-action btn-action--green" style={{ marginTop: '8px' }}>
-                  Adjudicate Case
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="card"><div className="card-header"><h3>Evidence Documents</h3></div>
+          <table className="data-table"><thead><tr><th>Document</th><th>Transaction</th><th>Uploaded By</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>{evidence.map((ev, i) => (<tr key={i}><td><strong>{ev.original_filename || 'Document'}</strong></td><td>TX-{String(ev.transaction_id).padStart(4, '0')}</td><td>{ev.uploaded_by_name || 'Officer'}</td><td><span className={`evidence-badge evidence-${ev.status.toLowerCase().replace(/_/g, '-')}`}>{ev.status.replace(/_/g, ' ')}</span></td><td>{new Date(ev.created_at).toLocaleDateString()}</td><td><button className="btn-icon"><Eye size={14} /></button></td></tr>))}</tbody></table>
         </div>
       )}
-    </section>
-  )
-}
-
-/* =========================================================================
-   CASE REVIEW MODAL (Adjudication & Notes)
-   ========================================================================= */
-function CaseReviewModal({
-  caseId,
-  onClose,
-  onUpdated,
-}: {
-  caseId: number
-  onClose: () => void
-  onUpdated: () => void
-}) {
-  const [detail, setDetail] = useState<CaseDetail | null>(null)
-  const [status, setStatus] = useState('UNDER_REVIEW')
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [feedback, setFeedback] = useState('')
-
-  useEffect(() => {
-    api.caseDetail(caseId)
-      .then((data) => {
-        setDetail(data)
-        setStatus(data.case.status)
-        setNotes(data.case.review_notes || '')
-      })
-      .catch(() => {
-        setDetail({
-          case: { id: caseId, case_code: 'CASE-0441', transaction_id: 3, parcel_code: 'RW-20991', status: 'UNDER_REVIEW', review_notes: 'Demo case: recent ownership changes and a second pending sale. Review required.', assigned_name: 'Marie Habyarimana', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-          transaction: { id: 3, transaction_code: 'TX-98233', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Eric Nkurunziza', buyer_name: 'Grace Mutesi', transaction_type: 'TRANSFER', transaction_date: '2026-09-21', declared_value: 9700000, status: 'UNDER_REVIEW' },
-          ownership_history: [
-            { id: 4, transfer_date: '2023-09-15', previous_owner_name: null, new_owner_name: 'Eric Nkurunziza', reason_type: 'FIRST_REGISTRATION' },
-            { id: 5, transfer_date: '2026-09-10', previous_owner_name: 'Eric Nkurunziza', new_owner_name: 'Claudine Ingabire', reason_type: 'SALE' },
-            { id: 6, transfer_date: '2026-09-20', previous_owner_name: 'Claudine Ingabire', new_owner_name: 'Eric Nkurunziza', reason_type: 'CORRECTION' },
-          ],
-          verification_results: [
-            { rule_name: 'Active transaction already exists', status: 'FAIL', severity: 'HIGH', explanation: 'Another active transaction exists for this parcel.' },
-            { rule_name: 'Recent ownership change', status: 'WARNING', severity: 'MEDIUM', explanation: 'Recent title change within the last 30 days.' },
-          ],
-          risk: { risk_score: 82, risk_level: 'HIGH', reasons: ['Recent ownership change detected.', 'Possible duplicate transaction detected.', 'Unusual transaction frequency detected.'] },
-          disclaimer: 'Risk indicators are advisory. Final decisions remain with authorized human officers.',
-        })
-        setNotes('Demo case: recent ownership changes and a second pending sale. Review required.')
-      })
-  }, [caseId])
-
-  const saveReview = async () => {
-    setSaving(true)
-    setFeedback('')
-    try {
-      await api.updateCase(caseId, { status, review_notes: notes })
-      setFeedback('Review notes and case status updated successfully. Recorded in audit log.')
-      onUpdated()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to update case'
-      setFeedback(`Error: ${msg}. Please ensure you are logged in.`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (!detail) return null
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window modal-window--large" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <h2>Case Review: {detail.case.case_code}</h2>
-            <p>Subject Parcel: {detail.case.parcel_code || 'Cadastral Parcel'} · Transaction: {detail.transaction?.transaction_code || 'N/A'}</p>
-          </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="detail-grid">
-          <div className="detail-card">
-            <span>Transaction Type</span>
-            <strong>{detail.transaction?.transaction_type || 'Sale'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Parties</span>
-            <strong>{detail.transaction?.seller_name || 'Seller'} → {detail.transaction?.buyer_name || 'Buyer'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>AI Risk Evaluation</span>
-            <strong style={{ color: detail.risk?.risk_level === 'HIGH' ? '#f87171' : '#fbbf24' }}>
-              {detail.risk?.risk_level || 'HIGH'} ({detail.risk?.risk_score || 82}/100)
-            </strong>
-          </div>
-          <div className="detail-card">
-            <span>Review Officer</span>
-            <strong>{detail.case.assigned_name || 'Assigned Officer'}</strong>
-          </div>
-        </div>
-
-        {/* Flagged Explanations */}
-        {detail.risk?.reasons && detail.risk.reasons.length > 0 && (
-          <div style={{ marginBottom: '18px' }}>
-            <h4 style={{ margin: '0 0 8px', fontSize: '12px', color: '#f87171' }}>
-              Flagged Risk Anomaly Indicators:
-            </h4>
-            <ul className="risk-reasons-list">
-              {detail.risk.reasons.map((r, i) => (
-                <li key={i} className="risk-reason-item">
-                  <ShieldAlert size={14} style={{ color: '#f87171', flexShrink: 0 }} />
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Human Officer Review Form */}
-        <div className="review-box">
-          <h4>Authorized Officer Review & Decision Support</h4>
-          <label style={{ display: 'block', fontSize: '11px', color: '#adb5ae', marginBottom: '6px' }}>
-            Case Adjudication Status:
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              style={{ display: 'block', width: '100%', marginTop: '4px', padding: '8px', background: '#121413', border: '1px solid #303731', borderRadius: '6px', color: '#e5eae5' }}
-            >
-              <option value="OPEN">OPEN (Pending Investigation)</option>
-              <option value="UNDER_REVIEW">UNDER_REVIEW (Active Review)</option>
-              <option value="NEEDS_INFORMATION">NEEDS_INFORMATION (Documents Requested)</option>
-              <option value="RESOLVED">RESOLVED (Cleared for Conveyance)</option>
-              <option value="CLOSED">CLOSED (Rejected / Conveyance Denied)</option>
-            </select>
-          </label>
-
-          <label style={{ display: 'block', fontSize: '11px', color: '#adb5ae', marginTop: '12px', marginBottom: '6px' }}>
-            Official Investigation Notes:
-            <textarea
-              className="notes-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Enter review findings, verified physical deed reference, and official justification..."
-            />
-          </label>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-            <button className="btn-primary" onClick={saveReview} disabled={saving}>
-              {saving ? 'Saving...' : 'Submit Official Review Decision'}
-            </button>
-            {feedback && <span style={{ color: '#4ade80', fontSize: '11px' }}>{feedback}</span>}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
 
 /* =========================================================================
-   OWNERS VIEW
+   VERIFICATION PAGE
    ========================================================================= */
-function OwnersView({ onNewOwner, refreshKey }: { onNewOwner?: () => void; refreshKey?: number }) {
-  const [owners, setOwners] = useState<OwnerRecord[]>([])
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  const loadOwners = (query = '') => {
-    setLoading(true)
-    api.owners(query)
-      .then((data) => setOwners(data))
-      .catch(() => {
-        setOwners([
-          { id: 1, owner_code: 'O-2291', full_name: 'Jean Mugisha', identification_number: '11995521-DEMO', status: 'ACTIVE', parcels_owned: 2 },
-          { id: 2, owner_code: 'O-2292', full_name: 'Alice Uwase', identification_number: '11980073-DEMO', status: 'ACTIVE', parcels_owned: 1 },
-          { id: 3, owner_code: 'O-2293', full_name: 'Eric Nkurunziza', identification_number: '11974412-DEMO', status: 'ACTIVE', parcels_owned: 3 },
-          { id: 4, owner_code: 'O-2294', full_name: 'Claudine Ingabire', identification_number: '11968820-DEMO', status: 'ACTIVE', parcels_owned: 1 },
-          { id: 5, owner_code: 'O-2295', full_name: 'Patrick Habimana', identification_number: '11951150-DEMO', status: 'INACTIVE', parcels_owned: 1 },
-          { id: 6, owner_code: 'O-2296', full_name: 'Solange Mukamana', identification_number: '11946634-DEMO', status: 'ACTIVE', parcels_owned: 2 },
-        ])
-      })
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { loadOwners(search) }, [search, refreshKey])
-
-  return (
-    <section className="workspace-page">
-      <div className="workspace-header">
-        <div>
-          <h1>Registered Land Owners</h1>
-          <p>Citizens and entities holding title deeds in available cadastre records</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {onNewOwner && (
-            <button className="btn-primary" onClick={onNewOwner}>
-              <Plus size={15} /> New Owner
-            </button>
-          )}
-          <div className="page-search">
-            <Search size={14} />
-            <input
-              type="text"
-              placeholder="Search owners..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ background: 'transparent', border: 0, color: 'inherit', width: '100%', outline: 'none', fontSize: '10px' }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <p style={{ color: '#888', fontSize: '12px' }}>Loading owners...</p>
-      ) : (
-        <div className="reference-table reference-table--owners">
-          <div className="reference-header">
-            <span>OWNER ID</span>
-            <span>FULL NAME</span>
-            <span>IDENTIFICATION REFERENCE</span>
-            <span>PARCELS OWNED</span>
-            <span>STATUS</span>
-          </div>
-          {owners.map((owner) => (
-            <div className="reference-row" key={owner.id}>
-              <strong>{owner.owner_code}</strong>
-              <span>{owner.full_name}</span>
-              <span>{owner.identification_number || '1199 •••• DEMO'}</span>
-              <span>{owner.parcels_owned} parcels</span>
-              <span className={`status-label ${owner.status === 'INACTIVE' ? 'risk-label--high' : ''}`}>
-                {owner.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-/* =========================================================================
-   AUDIT LOGS VIEW
-   ========================================================================= */
-function AuditLogsView() {
-  const [logs, setLogs] = useState<AuditRecord[]>([])
-  const [loading, setLoading] = useState(true)
+function VerificationPage({ initialTxId }: { initialTxId?: number | null }) {
+  const [selectedTx, setSelectedTx] = useState<number | null>(initialTxId ?? null)
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
 
   useEffect(() => {
-    api.audit()
-      .then((data) => setLogs(data))
-      .catch(() => {
-        setLogs([
-          { id: 1, created_at: new Date().toISOString(), user_name: 'officer', action: 'TRANSACTION_VERIFICATION', entity: 'Transaction', entity_id: 'TX-98233' },
-          { id: 2, created_at: new Date(Date.now() - 3600000).toISOString(), user_name: 'officer', action: 'AI_RISK_ANALYSIS', entity: 'Transaction', entity_id: 'TX-98236' },
-          { id: 3, created_at: new Date(Date.now() - 7200000).toISOString(), user_name: 'officer', action: 'CASE_REVIEWED', entity: 'Case', entity_id: 'CASE-0441' },
-          { id: 4, created_at: new Date(Date.now() - 86400000).toISOString(), user_name: 'admin', action: 'USER_CREATED', entity: 'User', entity_id: 'officer2' },
-          { id: 5, created_at: new Date(Date.now() - 172800000).toISOString(), user_name: 'officer', action: 'OWNERSHIP_UPDATED', entity: 'Parcel', entity_id: 'RW-20991' },
-          { id: 6, created_at: new Date(Date.now() - 259200000).toISOString(), user_name: 'officer', action: 'LOGIN', entity: 'User', entity_id: 'officer' },
-        ])
+    if (initialTxId) setSelectedTx(initialTxId)
+  }, [initialTxId])
+
+  useEffect(() => {
+    api.transactions()
+      .then((txs) => {
+        if (txs && txs.length > 0) setTransactions(txs)
+        else setTransactions(fallbackTransactions)
       })
-      .finally(() => setLoading(false))
+      .catch(() => setTransactions(fallbackTransactions))
   }, [])
 
   return (
-    <section className="workspace-page">
-      <div className="workspace-header">
-        <div>
-          <h1>Immutable Audit Trail</h1>
-          <p>Cryptographically traceable operational and security log</p>
-        </div>
-      </div>
-
-      {loading ? (
-        <p style={{ color: '#888', fontSize: '12px' }}>Loading audit logs...</p>
-      ) : (
-        <div className="reference-table reference-table--audit-logs">
-          <div className="reference-header">
-            <span>TIMESTAMP (UTC)</span>
-            <span>OPERATOR</span>
-            <span>SECURITY / DOMAIN ACTION</span>
-            <span>TARGET ENTITY</span>
-            <span>TARGET ID</span>
-          </div>
-          {logs.map((log) => (
-            <div className="reference-row" key={log.id}>
-              <span>{new Date(log.created_at).toLocaleString()}</span>
-              <strong>{log.user_name || 'System Operator'}</strong>
-              <span className="status-label">{log.action}</span>
-              <span>{log.entity}</span>
-              <span>{log.entity_id || 'N/A'}</span>
-            </div>
-          ))}
+    <div className="workspace-page verification-page">
+      <h2 className="page-title">Verification</h2><p className="page-subtitle">Check for inconsistencies and get AI risk analysis.</p>
+      <div className="card"><label className="form-label">Select Transaction</label><select value={selectedTx ?? ''} onChange={(e) => setSelectedTx(e.target.value ? Number(e.target.value) : null)} className="form-select"><option value="">Select a transaction...</option>{transactions.map((tx) => (<option key={tx.id} value={tx.id}>{tx.transaction_code} — {tx.parcel_code} — {tx.seller_name} → {tx.buyer_name}</option>))}</select><button className="btn-primary" disabled={!selectedTx}>Run Verification</button></div>
+      {selectedTx && (
+        <div className="verification-grid">
+          <div className="card"><div className="card-header"><h3>Rule-based Checks</h3></div><div className="check-list"><div className="check-item check--pass"><CheckCircle size={16} /> UPI exists in system</div><div className="check-item check--pass"><CheckCircle size={16} /> Seller matches recorded owner</div><div className="check-item check--pass"><CheckCircle size={16} /> No duplicate active transaction</div><div className="check-item check--pass"><CheckCircle size={16} /> Required information complete</div><div className="check-item check--warn"><AlertTriangle size={16} /> Payment evidence pending review</div></div></div>
+          <div className="card"><div className="card-header"><h3>AI Risk Analysis</h3></div><div className="risk-gauge"><div className="gauge-circle"><span className="gauge-value">32</span><span className="gauge-label">Risk Score</span></div><div className="gauge-legend"><div><span className="gauge-dot gauge-dot--high" /> High Risk 0%</div><div><span className="gauge-dot gauge-dot--medium" /> Medium Risk 32%</div><div><span className="gauge-dot gauge-dot--low" /> Low Risk 68%</div></div></div><div className="risk-verdict risk-verdict--medium"><strong>Medium Risk</strong><p>Possible inconsistency in payment details and recent ownership change.</p></div></div>
         </div>
       )}
-    </section>
+    </div>
   )
 }
 
 /* =========================================================================
-   REPORTS VIEW
+   PENDING REVIEWS PAGE
    ========================================================================= */
-function ReportsView() {
-  const [reportType, setReportType] = useState('verification')
-  const [reportData, setReportData] = useState<any>(null)
+function PendingReviewsPage() {
+  const [filter, setFilter] = useState('all')
+  const mockReviews = [
+    { id: 'TX-004', upi: 'UPI-004', seller: 'Denis', buyer: 'Claude', reason: 'High risk score (70%)', evidence: 'Missing', date: 'Apr 18, 2025' },
+    { id: 'TX-006', upi: 'UPI-006', seller: 'Fidele', buyer: 'Alice', reason: 'Payment amount mismatch', evidence: 'Needs Review', date: 'Apr 16, 2025' },
+    { id: 'TX-007', upi: 'UPI-003', seller: 'Samuel', buyer: 'Claudine', reason: 'New owner (7 days)', evidence: 'Partial', date: 'Apr 22, 2025' },
+    { id: 'TX-002', upi: 'UPI-001', seller: 'Jean', buyer: 'Patrick', reason: 'Payment evidence pending', evidence: 'Under Review', date: 'Apr 20, 2025' },
+    { id: 'TX-009', upi: 'UPI-008', seller: 'Joseph', buyer: 'Alice', reason: 'Inconsistent documents', evidence: 'Inconsistent', date: 'Apr 23, 2025' },
+  ]
+
+  return (
+    <div className="workspace-page pending-reviews-page">
+      <h2 className="page-title">Pending Reviews</h2><p className="page-subtitle">Transactions that need your attention.</p>
+      <div className="filter-tabs"><button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All (5)</button><button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk (2)</button><button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence (1)</button><button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification (2)</button></div>
+      <div className="table-card"><table className="data-table"><thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller → Buyer</th><th>Reason</th><th>Evidence Status</th><th>Date</th><th>Actions</th></tr></thead>
+        <tbody>{mockReviews.map((r) => (<tr key={r.id}><td><strong>{r.id}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(' ', '-')}`}>{r.evidence}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm">Review Details</button></td></tr>))}</tbody></table>
+        <div className="table-footer"><span>Showing 1-5 of 5</span><div className="pagination"><button className="page-btn" disabled>&lt;</button><button className="page-btn page-btn--active">1</button><button className="page-btn" disabled>&gt;</button></div></div></div>
+    </div>
+  )
+}
+
+/* =========================================================================
+   ADMIN, AUDITOR, AND REPORTING PAGES
+   ========================================================================= */
+function UserManagementPage() {
+  const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    api.report(reportType)
-      .then((data) => setReportData(data))
-      .catch(() => {
-        // Fallback demo reports
-        setReportData({
-          title: `${reportType.toUpperCase()} Compliance Report`,
-          disclaimer: 'Synthetic prototype data generated for graduation project evaluation.',
-          items: [
-            { date: '2026-09-26', transaction_id: 1, rule_name: 'Parcel exists', result: 'PASS', severity: 'LOW' },
-            { date: '2026-09-26', transaction_id: 3, rule_name: 'Seller ownership match', result: 'FAIL', severity: 'HIGH' },
-            { date: '2026-09-25', transaction_id: 6, rule_name: 'Conflicting transaction records', result: 'FAIL', severity: 'HIGH' },
-          ],
-        })
-      })
-      .finally(() => setLoading(false))
-  }, [reportType])
-
-  return (
-    <section className="workspace-page">
-      <div className="workspace-header">
-        <div>
-          <h1>Institutional Compliance Reports</h1>
-          <p>Exportable audits, verification summaries, and risk disclosures</p>
-        </div>
-        <button className="btn-primary" onClick={() => window.print()}>
-          <Printer size={15} /> Print / Export PDF
-        </button>
-      </div>
-
-      <div className="report-panel">
-        <div className="report-tabs">
-          <button className={`report-tab-btn ${reportType === 'verification' ? 'report-tab-btn--active' : ''}`} onClick={() => setReportType('verification')}>
-            Transaction Verification Report
-          </button>
-          <button className={`report-tab-btn ${reportType === 'risk' ? 'report-tab-btn--active' : ''}`} onClick={() => setReportType('risk')}>
-            AI Fraud-Risk Analysis Report
-          </button>
-          <button className={`report-tab-btn ${reportType === 'cases' ? 'report-tab-btn--active' : ''}`} onClick={() => setReportType('cases')}>
-            Suspicious Cases Review Report
-          </button>
-          <button className={`report-tab-btn ${reportType === 'audit' ? 'report-tab-btn--active' : ''}`} onClick={() => setReportType('audit')}>
-            System Audit Trail Report
-          </button>
-        </div>
-
-        <div className="report-banner">
-          <div>
-            <strong style={{ fontSize: '13px', display: 'block' }}>{reportData?.title || 'Institutional Report'}</strong>
-            <span>Generated: {new Date().toUTCString()} · Authority: Rwanda Cadastral Office</span>
-          </div>
-          <span className="status-label">OFFICIAL PROTOTYPE</span>
-        </div>
-
-        {loading ? (
-          <p style={{ color: '#888', fontSize: '12px' }}>Generating report data...</p>
-        ) : (
-          <div className="reference-table">
-            <div className="reference-header">
-              <span>RECORD ID / DATE</span>
-              <span>DOMAIN CLASSIFICATION</span>
-              <span>STATUS / OUTCOME</span>
-              <span>SEVERITY / SCORE</span>
-            </div>
-            {Array.isArray(reportData?.items) && reportData.items.slice(0, 10).map((row: any, i: number) => (
-              <div className="reference-row" key={i}>
-                <span>{row.date ? new Date(row.date).toLocaleDateString() : `#${i + 1}`}</span>
-                <strong>{row.rule_name || row.case_code || row.action || `TX-${row.transaction_id}`}</strong>
-                <span className={`status-label ${row.result === 'FAIL' || row.risk_level === 'HIGH' ? 'risk-label--high' : ''}`}>
-                  {row.result || row.status || row.risk_level || 'RECORDED'}
-                </span>
-                <span>{row.severity || (row.risk_score ? `${row.risk_score}/100` : 'Normal')}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="report-disclaimer">
-          {reportData?.disclaimer || 'Risk indicators are advisory only and do not constitute legal proof of fraud or ownership.'}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* =========================================================================
-   ADMIN USERS PAGE
-   ========================================================================= */
-function AdminUsersPage({ onBack }: { onBack: () => void }) {
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'OFFICER' })
   const [message, setMessage] = useState('')
-  const [accounts, setAccounts] = useState<UserRecord[]>([])
-  const [removeTarget, setRemoveTarget] = useState<UserRecord | null>(null)
-  const [loadError, setLoadError] = useState('')
 
-  const loadAccounts = () =>
-    api.users()
-      .then((data) => { setAccounts(data); setLoadError('') })
-      .catch((err) => setLoadError(err.message || 'Only administrators can view users.'))
+  const loadUsers = () => {
+    setLoading(true)
+    api.users().then(setUsers).catch(() => setMessage('Unable to load users.')).finally(() => setLoading(false))
+  }
 
-  useEffect(() => { loadAccounts() }, [])
+  useEffect(loadUsers, [])
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const disableUser = async (id: number) => {
     try {
-      await api.createUser(form)
-      setMessage('User created successfully.')
-      setForm({ full_name: '', email: '', password: '', role: 'OFFICER' })
-      loadAccounts()
+      await api.disableUser(id)
+      setMessage('User access revoked.')
+      loadUsers()
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to create user.')
+      setMessage(err instanceof Error ? err.message : 'Unable to update user.')
     }
   }
 
-  const removeAccess = async () => {
-    if (!removeTarget) return
-    try {
-      await api.disableUser(removeTarget.id)
-      setRemoveTarget(null)
-      loadAccounts()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Unable to revoke user')
-    }
+  return <div>
+    <div className="page-heading"><div><h1>User Management</h1><p className="heading-subtitle">Manage authorized personnel and role access.</p></div><button className="btn-primary"><Plus size={15} /> Add User</button></div>
+    {message && <div className="alert alert--info">{message}</div>}
+    <div className="table-card"><table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead><tbody>
+      {loading ? <tr><td colSpan={6}>Loading users...</td></tr> : users.map((user) => <tr key={user.id}><td><strong>{user.full_name}</strong><br /><span className="text-muted">{user.username || 'No username'}</span></td><td>{user.email}</td><td>{user.roles[0]?.name || 'Unassigned'}</td><td><span className={user.is_active ? 'status-label risk-label--low' : 'status-label risk-label--high'}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td>Not available</td><td>{user.is_active && <button className="btn-secondary btn-sm" onClick={() => disableUser(user.id)}>Revoke</button>}</td></tr>)}
+    </tbody></table></div>
+  </div>
+}
+
+function SystemSettingsPage() {
+  const [tab, setTab] = useState('General')
+  const [saved, setSaved] = useState(false)
+  const tabs = ['General', 'Security', 'Notifications', 'Database', 'File Storage']
+  return <div>
+    <div className="page-heading"><div><h1>System Settings</h1><p className="heading-subtitle">Configure institutional verification and storage preferences.</p></div><button className="btn-primary" onClick={() => setSaved(true)}><Check size={15} /> Save Settings</button></div>
+    {saved && <div className="alert alert--success">Settings saved for this session.</div>}
+    <div className="filter-tabs">{tabs.map((item) => <button key={item} className={`filter-tab ${tab === item ? 'filter-tab--active' : ''}`} onClick={() => { setTab(item); setSaved(false) }}>{item}</button>)}</div>
+    <div className="card"><div className="card-header"><h3>{tab} Configuration</h3></div><div className="settings-form">
+      <label>System Name<input className="filter-input" defaultValue="LandGuard AI" /></label>
+      <label>Organization<input className="filter-input" defaultValue="Rwanda Land Administration" /></label>
+      <label>Default Review Threshold<select className="filter-select" defaultValue="medium"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <label>Allowed File Types<input className="filter-input" defaultValue="PDF, JPG, PNG" /></label>
+    </div></div>
+  </div>
+}
+
+function EvidenceReviewPage() {
+  const [evidence, setEvidence] = useState<any[]>([])
+  const [status, setStatus] = useState('ALL')
+  const [message, setMessage] = useState('')
+  const load = () => api.evidenceList().then(setEvidence).catch(() => setMessage('Unable to load evidence documents.'))
+  useEffect(() => { load() }, [])
+  const visible = status === 'ALL' ? evidence : evidence.filter((item) => item.status === status)
+  const review = async (id: number, nextStatus: string) => {
+    try { await api.reviewEvidence(id, { status: nextStatus, reviewNotes: 'Reviewed from Evidence Review.' }); setMessage('Evidence status updated.'); load() }
+    catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to review evidence.') }
   }
+  return <div>
+    <div className="page-heading"><div><h1>Evidence Review</h1><p className="heading-subtitle">Inspect uploaded documents and record review outcomes.</p></div><button className="btn-secondary"><Download size={15} /> Export</button></div>
+    {message && <div className="alert alert--info">{message}</div>}
+    <div className="filter-bar"><select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)}><option value="ALL">All statuses</option><option value="UPLOADED">Uploaded</option><option value="UNDER_REVIEW">Under Review</option><option value="VERIFIED_FOR_REVIEW">Verified</option><option value="NEEDS_CLARIFICATION">Needs Clarification</option></select></div>
+    <div className="table-card"><table className="data-table"><thead><tr><th>Document</th><th>Transaction</th><th>Type</th><th>Status</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody>
+      {visible.map((item) => <tr key={item.id}><td><strong>{item.original_filename || 'Document'}</strong></td><td>TX-{String(item.transaction_id).padStart(4, '0')}</td><td>{item.document_type}</td><td><span className={`evidence-badge evidence-${String(item.status).toLowerCase().replace(/_/g, '-')}`}>{String(item.status).replace(/_/g, ' ')}</span></td><td>{new Date(item.created_at).toLocaleDateString()}</td><td><button className="btn-secondary btn-sm" onClick={() => review(item.id, 'VERIFIED_FOR_REVIEW')}>Verify</button><button className="btn-icon" title="Request clarification" onClick={() => review(item.id, 'NEEDS_CLARIFICATION')}><AlertTriangle size={14} /></button></td></tr>)}
+    </tbody></table></div>
+  </div>
+}
 
-  return (
-    <section className="workspace-page">
-      <button className="back-button" onClick={onBack}>← Back to Dashboard</button>
-      <div className="workspace-header">
-        <div>
-          <h1>User Account Administration</h1>
-          <p>Create authorized verification officer and auditor accounts</p>
-        </div>
-      </div>
+function AuditLogsPage() {
+  const [logs, setLogs] = useState<AuditRecord[]>([])
+  const [query, setQuery] = useState('')
+  useEffect(() => { api.audit().then(setLogs).catch(() => setLogs([])) }, [])
+  const filtered = logs.filter((log) => `${log.action} ${log.entity} ${log.user_name || ''}`.toLowerCase().includes(query.toLowerCase()))
+  return <div>
+    <div className="page-heading"><div><h1>Audit Logs</h1><p className="heading-subtitle">Immutable record of administrative and verification activity.</p></div><button className="btn-secondary"><Download size={15} /> Export</button></div>
+    <div className="filter-bar"><input className="filter-input" placeholder="Search activity, entity, or user" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+    <div className="table-card"><table className="data-table"><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Reference</th></tr></thead><tbody>{filtered.map((log) => <tr key={log.id}><td>{new Date(log.created_at).toLocaleString()}</td><td>{log.user_name || 'System'}</td><td><strong>{log.action}</strong></td><td>{log.entity}</td><td>{log.entity_id || '-'}</td></tr>)}</tbody></table></div>
+  </div>
+}
 
-      {loadError ? (
-        <div className="access-message">{loadError}</div>
-      ) : (
-        <div className="admin-user-layout">
-          <form className="user-create-form" onSubmit={submit}>
-            <p className="eyebrow">Provision Account</p>
-            <div className="create-fields">
-              <label>
-                Full Name
-                <input required placeholder="e.g. Diane Uwimana" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-              </label>
-              <label>
-                Username or Email
-                <input required type="email" placeholder="d.uwimana@landguard.local" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </label>
-              <label>
-                Temporary Password
-                <input required type="password" minLength={8} placeholder="Min 8 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-              </label>
-              <label>
-                Assigned Role
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="OFFICER">Verification Officer</option>
-                  <option value="AUDITOR">Auditor (Read-Only)</option>
-                </select>
-              </label>
-            </div>
-            <button className="login-button" type="submit">Provision Account</button>
-            {message && <p className="form-message">{message}</p>}
-          </form>
-
-          <div className="accounts-panel">
-            <div className="accounts-heading">
-              <strong>Authorized Personnel Directory</strong>
-              <span>{accounts.filter(a => a.is_active).length} Active Accounts</span>
-            </div>
-            {accounts.map((acc) => (
-              <div className="account-row" key={acc.id}>
-                <div className="avatar">{initials(acc.full_name)}</div>
-                <div className="account-name">
-                  <strong>{acc.full_name}</strong>
-                  <span>{acc.email}</span>
-                </div>
-                <span className={`account-role account-role--${acc.roles[0]?.name.toLowerCase()}`}>
-                  {acc.roles[0]?.name}
-                </span>
-                <span className={acc.is_active ? 'account-active' : 'account-inactive'}>
-                  {acc.is_active ? '● Active' : '● Revoked'}
-                </span>
-                <button
-                  className="account-icon account-icon--delete"
-                  aria-label="Revoke"
-                  onClick={() => setRemoveTarget(acc)}
-                  disabled={!acc.is_active || acc.id === 1}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {removeTarget && (
-        <div className="modal-backdrop">
-          <div className="remove-modal">
-            <h2>Revoke {removeTarget.full_name}?</h2>
-            <p>This user will immediately lose access to LandGuard AI.</p>
-            <div className="modal-actions">
-              <button className="cancel-button" onClick={() => setRemoveTarget(null)}>Cancel</button>
-              <button className="remove-button" onClick={removeAccess}>Revoke Access</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
-  )
+function ReportsPage() {
+  const [report, setReport] = useState('transaction-summary')
+  const [result, setResult] = useState<Record<string, unknown> | null>(null)
+  const [loading, setLoading] = useState(false)
+  const generate = async () => { setLoading(true); try { setResult(await api.report(report)) } catch { setResult({ message: 'Report data is not available yet.' }) } finally { setLoading(false) } }
+  return <div>
+    <div className="page-heading"><div><h1>Reports</h1><p className="heading-subtitle">Generate operational and compliance summaries.</p></div><button className="btn-primary" onClick={generate} disabled={loading}><FileText size={15} /> {loading ? 'Generating...' : 'Generate Report'}</button></div>
+    <div className="card"><div className="settings-form"><label>Report Type<select className="filter-select" value={report} onChange={(e) => setReport(e.target.value)}><option value="transaction-summary">Transaction Summary</option><option value="risk-summary">Risk Summary</option><option value="audit-summary">Audit Summary</option></select></label><label>Period<input className="filter-input" type="month" defaultValue="2026-10" /></label></div></div>
+    {result && <div className="card"><div className="card-header"><h3>Generated Report</h3><button className="btn-secondary"><Download size={15} /> Download</button></div><pre className="report-output">{JSON.stringify(result, null, 2)}</pre></div>}
+  </div>
 }
 
 /* =========================================================================
-   NEW TRANSACTION REGISTRATION MODAL
+   PROFILE PAGE
    ========================================================================= */
-function NewTransactionModal({
-  defaultParcelId,
-  onClose,
-  onCreated,
-}: {
-  defaultParcelId: number | null
-  onClose: () => void
-  onCreated: (txId: number) => void
-}) {
-  const [parcelId, setParcelId] = useState(defaultParcelId ?? 1)
-  const [sellerId, setSellerId] = useState(1)
-  const [buyerId, setBuyerId] = useState(2)
-  const [type, setType] = useState('SALE')
-  const [value, setValue] = useState('18000000')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      const payload = {
-        parcel_id: Number(parcelId),
-        seller_owner_id: Number(sellerId),
-        buyer_owner_id: Number(buyerId),
-        transaction_type: type,
-        transaction_date: new Date().toISOString(),
-        declared_value: value,
-        status: 'PENDING',
-      }
-      const created = await api.createTransaction(payload)
-      onCreated(created.id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register transaction')
-      setSaving(false)
-    }
-  }
+function ProfilePage({ currentUser, onLogout }: { currentUser: CurrentUser | null; onLogout: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [emailNotifs, setEmailNotifs] = useState(true)
+  const [smsNotifs, setSmsNotifs] = useState(true)
+  const [systemAlerts, setSystemAlerts] = useState(true)
+  const [frequency, setFrequency] = useState('Instant')
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <h2>Register Conveyance Application</h2>
-            <p>Submit land deed transfer for verification and risk scoring</p>
-          </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <form onSubmit={submit} className="login-form">
-          <label>
-            Target Parcel ID
-            <input
-              type="number"
-              value={parcelId}
-              onChange={(e) => setParcelId(Number(e.target.value))}
-              required
-            />
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <label>
-              Seller Owner ID
-              <input
-                type="number"
-                value={sellerId}
-                onChange={(e) => setSellerId(Number(e.target.value))}
-                required
-              />
-            </label>
-            <label>
-              Buyer Owner ID
-              <input
-                type="number"
-                value={buyerId}
-                onChange={(e) => setBuyerId(Number(e.target.value))}
-                required
-              />
-            </label>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <label>
-              Conveyance Type
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                style={{ width: '100%', padding: '10px', background: '#101310', border: '1px solid #303731', borderRadius: '6px', color: '#fff' }}
-              >
-                <option value="SALE">SALE</option>
-                <option value="TRANSFER">TRANSFER</option>
-                <option value="INHERITANCE">INHERITANCE</option>
-              </select>
-            </label>
-            <label>
-              Declared Valuation (RWF)
-              <input
-                type="text"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                required
-              />
-            </label>
-          </div>
-
-          {error && <p className="login-error">{error}</p>}
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-            <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" type="submit" disabled={saving}>
-              {saving ? 'Registering...' : 'Register & Proceed to Verification'}
-            </button>
-          </div>
-        </form>
-      </div>
+    <div className="profile-page">
+      <div className="page-heading profile-page-heading"><div><h1>My Profile</h1><p className="heading-subtitle">Manage your account information and preferences.</p></div></div>
+      <section className="profile-identity-card">
+        <div className="profile-identity-main"><div className="profile-avatar-lg">{currentUser ? initials(currentUser.full_name) : 'OF'}</div><div><h2>{currentUser?.full_name ?? 'Officer User'} <span className="badge badge--success">Active</span></h2><span className="profile-role">{displayRole(currentUser?.roles[0] ?? 'OFFICER')}</span><p>Land Officer - Gasabo District</p></div></div>
+        <button className="btn-outline" onClick={() => setEditing(!editing)}>{editing ? 'Cancel' : 'Edit Profile'}</button>
+        <div className="profile-contact-row"><div><span>Email</span><strong>{currentUser?.email ?? 'officer@landguard.rw'}</strong></div><div><span>Phone</span><strong>+250 788 123 456</strong></div><div><span>Joined</span><strong>Apr 10, 2025</strong></div></div>
+      </section>
+      <section className="profile-preferences-card"><div className="profile-section-heading"><h3>Contact Preferences</h3></div><div className="profile-preferences-grid"><div className="profile-toggle-list"><div className="profile-toggle-row"><span>✉ Email Notifications</span><button aria-label="Toggle email notifications" className={`toggle ${emailNotifs ? 'toggle--on' : ''}`} onClick={() => setEmailNotifs(!emailNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>▣ SMS Notifications</span><button aria-label="Toggle SMS notifications" className={`toggle ${smsNotifs ? 'toggle--on' : ''}`} onClick={() => setSmsNotifs(!smsNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>♟ System Alerts</span><button aria-label="Toggle system alerts" className={`toggle ${systemAlerts ? 'toggle--on' : ''}`} onClick={() => setSystemAlerts(!systemAlerts)}><span className="toggle-dot" /></button></div></div><label className="frequency-control">Notification Frequency<select value={frequency} onChange={(e) => setFrequency(e.target.value)}><option>Instant</option><option>Daily digest</option><option>Weekly digest</option></select></label></div></section>
+      <div className="profile-security-grid"><section className="profile-security-card"><div className="security-icon">♙</div><div><h3>Change Password</h3><p>Update your password regularly to keep your account secure.</p><button className="btn-outline">Change Password</button></div></section><section className="profile-security-card"><div className="security-icon">♢</div><div><h3>Security & Sessions</h3><p>Last Login<br /><strong>Apr 23, 2025 09:12 AM</strong></p><p>Active Sessions<br /><strong>1 device</strong></p><button className="btn-outline">View Sessions</button></div></section></div>
     </div>
   )
 }
 
 /* =========================================================================
-   NEW OWNER REGISTRATION MODAL
+   PROFILE MODAL
    ========================================================================= */
-function NewOwnerModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void
-  onCreated: () => void
-}) {
-  // onCreated is called after successful creation — parent refreshes the list
-  const [ownerCode, setOwnerCode] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [idNumber, setIdNumber] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [status, setStatus] = useState('ACTIVE')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      await api.createOwner({
-        owner_code: ownerCode,
-        full_name: fullName,
-        identification_number: idNumber || undefined,
-        phone: phone || undefined,
-        email: email || undefined,
-        status,
-      })
-      onCreated()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register owner')
-      setSaving(false)
-    }
-  }
-
+function ProfileModal({ user, onClose, onLogout }: { user: CurrentUser | null; onClose: () => void; onLogout: () => void }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <h2>Register New Land Owner</h2>
-            <p>Add a citizen or entity to the cadastre records</p>
-          </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <form onSubmit={submit} className="login-form">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <label>
-              Owner Code
-              <input
-                required
-                placeholder="e.g., OWN-2301"
-                value={ownerCode}
-                onChange={(e) => setOwnerCode(e.target.value)}
-              />
-            </label>
-            <label>
-              Full Name
-              <input
-                required
-                placeholder="e.g., Diane Uwimana"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <label>
-            Identification Number
-            <input
-              placeholder="e.g., 11999999-DEMO"
-              value={idNumber}
-              onChange={(e) => setIdNumber(e.target.value)}
-            />
-          </label>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <label>
-              Phone Number
-              <input
-                placeholder="e.g., +250780000099"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </label>
-            <label>
-              Email Address
-              <input
-                type="email"
-                placeholder="e.g., owner@landguard.local"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <label>
-            Status
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              style={{ width: '100%', padding: '10px', background: '#101310', border: '1px solid #303731', borderRadius: '6px', color: '#fff' }}
-            >
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-            </select>
-          </label>
-
-          {error && <p className="login-error">{error}</p>}
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-            <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" type="submit" disabled={saving}>
-              {saving ? 'Registering...' : 'Register Owner'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <div className="modal-overlay" onClick={onClose}><div className="modal-window" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-head"><div><h2>User Account Profile</h2><p>Active authenticated session details</p></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div>
+      <div className="detail-grid"><div className="detail-card"><span>Operator Name</span><strong>{user?.full_name || 'Verification Officer'}</strong></div><div className="detail-card"><span>Username / Email</span><strong>{user?.email || 'officer@landguard.local'}</strong></div><div className="detail-card"><span>Assigned Role</span><strong>{user?.roles?.join(', ') || 'OFFICER'}</strong></div><div className="detail-card"><span>Account Status</span><strong>{user?.is_active ? 'Active & Authorized' : 'Revoked'}</strong></div></div>
+      <div className="modal-actions"><button className="btn-secondary" onClick={onClose}>Close</button><button className="btn-secondary btn-danger" onClick={onLogout}>Sign Out</button></div>
+    </div></div>
   )
 }
 
 /* =========================================================================
-   USER PROFILE MODAL
+   UTILITIES
    ========================================================================= */
-function ProfileModal({
-  user,
-  onClose,
-  onLogout,
-}: {
-  user: CurrentUser | null
-  onClose: () => void
-  onLogout: () => void
-}) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <div>
-            <h2>User Account Profile</h2>
-            <p>Active authenticated session details</p>
-          </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
-        </div>
-
-        <div className="detail-grid">
-          <div className="detail-card">
-            <span>Operator Name</span>
-            <strong>{user?.full_name || 'Verification Officer'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Username / Email</span>
-            <strong>{user?.email || 'officer@landguard.local'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Assigned Role</span>
-            <strong style={{ color: '#4ade80' }}>{user?.roles?.join(', ') || 'OFFICER'}</strong>
-          </div>
-          <div className="detail-card">
-            <span>Account Status</span>
-            <strong>{user?.is_active ? 'Active & Authorized' : 'Revoked'}</strong>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between' }}>
-          <button className="btn-secondary" onClick={onClose}>Close</button>
-          <button className="btn-secondary" style={{ color: '#f87171' }} onClick={onLogout}>
-            Sign Out
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* =========================================================================
-   HELPERS & UI COMPONENTS
-   ========================================================================= */
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  change,
-  accent,
-  onClick,
-}: {
-  icon: typeof Map
-  label: string
-  value: string
-  change: string
-  accent: string
-  onClick?: () => void
-}) {
-  return (
-    <div className="metric-card" style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick}>
-      <div className={`metric-icon metric-icon--${accent}`}>
-        <Icon size={17} />
-      </div>
-      <div className="metric-info">
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
-      <span className="metric-change">{change}</span>
-    </div>
-  )
-}
-
-function RiskCard({
-  label,
-  value,
-  percent,
-  tone,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  percent: string
-  tone: string
-  icon: typeof Check
-}) {
-  return (
-    <div className={`risk-card risk-card--${tone}`}>
-      <div className="risk-card-top">
-        <div>
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </div>
-        <div className="risk-card-icon"><Icon size={16} /></div>
-      </div>
-      <div className="risk-card-bottom">
-        <span>{percent} of queue</span>
-        <div className="progress-track"><div style={{ width: percent }} /></div>
-      </div>
-    </div>
-  )
-}
-
-function Bar({ value, label, tone, count }: { value: string; label: string; tone: string; count: string }) {
-  return (
-    <div className="bar-column">
-      <div className={`bar bar--${tone}`} style={{ height: value }}>
-        <span>{count}</span>
-      </div>
-      <strong>{label}</strong>
-    </div>
-  )
-}
-
-function riskPercent(value: number, total: number) {
-  return total ? `${Math.round((value / total) * 100)}%` : '0%'
-}
-
-function initials(name: string) {
-  return name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
-}
-
-function displayRole(role?: string) {
-  if (role === 'OFFICER') return 'Verification Officer'
-  if (role === 'ADMIN') return 'System Administrator'
-  if (role === 'AUDITOR') return 'Compliance Auditor'
-  return 'Authorized Officer'
-}
-
-function dashboardTitle(role?: string) {
-  if (role === 'ADMIN') return 'Administration & Security Console'
-  if (role === 'AUDITOR') return 'Cadastre Audit & Compliance Console'
-  return 'Transaction Verification & Fraud-Risk Console'
-}
-
-function dashboardSubtitle(role?: string) {
-  if (role === 'ADMIN') return 'Manage user authorizations, inspect system audit logs, and monitor cadastre operations.'
-  if (role === 'AUDITOR') return 'Review historical transactions, verification rule outcomes, and compliance audit trails.'
-  return 'Evaluate conveyance applications, trigger 9-rule verification checks, and review AI risk indicators.'
-}
-
-export default App
+function initials(name: string) { return name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() }
+function displayRole(role?: string) { if (role === 'OFFICER') return 'Verification Officer'; if (role === 'ADMIN') return 'System Administrator'; if (role === 'AUDITOR') return 'Compliance Auditor'; return 'Authorized Officer' }
