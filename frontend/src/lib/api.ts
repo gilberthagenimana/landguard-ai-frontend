@@ -31,6 +31,7 @@ export const api = {
   createUser: (payload: object) => request<UserRecord>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
   disableUser: (id: number) => request(`/api/users/${id}`, { method: 'DELETE' }),
   parcels: (q = '') => request<ParcelRecord[]>(`/api/parcels${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  createParcel: (payload: ParcelCreatePayload) => request<ParcelRecord>('/api/parcels', { method: 'POST', body: JSON.stringify(payload) }),
   parcelByUpi: (upi: string) => request<ParcelRecord>(`/api/parcels/upi/${encodeURIComponent(upi)}`),
   submitParcelLocation: (parcelId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/${parcelId}/location-submissions`, { method: 'POST', body: JSON.stringify(payload) }),
   parcelLocationSubmissions: (parcelId: number) => request<ParcelLocationSubmission[]>(`/api/parcels/${parcelId}/location-submissions`),
@@ -64,7 +65,12 @@ export const api = {
     return request<EvidenceOut>(`/api/evidence/transactions/${transactionId}`, { method: 'POST', body: formData })
   },
   reviewEvidence: (evidenceId: number, payload: { status: string; reviewNotes: string }) => request<EvidenceOut>(`/api/evidence/${evidenceId}/review`, { method: 'PUT', body: JSON.stringify(payload) }),
-  evidenceList: () => request<EvidenceOut[]>('/api/evidence'),
+  // The backend has no 'list all evidence' route, so gather evidence per transaction (latest 100).
+  evidenceList: async (): Promise<EvidenceOut[]> => {
+    const txs = await request<TransactionRecord[]>('/api/transactions')
+    const results = await Promise.allSettled(txs.slice(0, 100).map((t) => request<EvidenceOut[]>(`/api/evidence/transactions/${t.id}`)))
+    return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+  },
 }
 
 export type DashboardStats = {
@@ -77,6 +83,20 @@ export type DashboardStats = {
   high_risk_transactions: number
   recent_verification_activity: { action: string; entity: string; entity_id: string | null; created_at: string }[]
   recent_alerts: { id: string; title: string; meta: string; risk: string }[]
+}
+
+export type ParcelCreatePayload = {
+  upi: string
+  parcel_code: string
+  location: string
+  province: string
+  district: string
+  sector: string
+  cell: string
+  village: string
+  area_ha: number
+  status?: string
+  registration_reference?: string
 }
 
 export type RoleRecord = { name: string }

@@ -5,6 +5,7 @@ import {
   ClipboardCheck, Clock, Download, FileText, Flag, FolderOpen, LayoutDashboard,
   LogOut, MapPin, Menu, Plus, Search, Shield, ShieldCheck, Upload,
   UserRound, Users, X, Eye, FileIcon, AlertCircle, Info, Filter, RotateCcw,
+  ArrowLeftRight, BarChart3, ClipboardList, Settings,
 } from 'lucide-react'
 import {
   api, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
@@ -18,17 +19,24 @@ import OfficerDashboard from './components/OfficerDashboard'
 import AuditorDashboard from './components/AuditorDashboard'
 import EvidenceSection from './components/EvidenceSection'
 import ParcelMap from './components/ParcelMap'
+import './dashboard.css'
 
 type Risk = 'Low' | 'Medium' | 'High'
 type Page = 'Dashboard' | 'Search Parcel' | 'Transactions' | 'Evidence' | 'Verification' | 'Pending Reviews' | 'Profile'
 
 const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'User Management', icon: Users },
+  { label: 'System Settings', icon: Settings },
   { label: 'Search Parcel', icon: Search },
-  { label: 'Transactions', icon: ArrowRight },
+  { label: 'Transactions', icon: ArrowLeftRight },
+  { label: 'Transactions Overview', icon: ArrowLeftRight },
   { label: 'Evidence', icon: FileText },
+  { label: 'Evidence Review', icon: FolderOpen },
   { label: 'Verification', icon: ShieldCheck },
   { label: 'Pending Reviews', icon: Clock },
+  { label: 'Audit Logs', icon: ClipboardList },
+  { label: 'Reports', icon: BarChart3 },
   { label: 'Profile', icon: UserRound },
 ]
 
@@ -81,7 +89,9 @@ export default function App() {
   }
 
   const role = currentUser?.roles[0] ?? 'OFFICER'
-  const allowedNav = navigation.filter(({ label }) => roleNavigation[role]?.includes(label))
+  const allowedNav = (roleNavigation[role] ?? [])
+    .map((label) => navigation.find((item) => item.label === label))
+    .filter((item): item is (typeof navigation)[number] => Boolean(item))
 
   return (
     <div className="app-shell">
@@ -113,7 +123,7 @@ export default function App() {
           <button className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-divider">/</span><strong>{activeNav}</strong></div>
           <div className="top-actions">
-            <button className="icon-button" onClick={() => setActiveNav('Pending Reviews')}><Bell size={18} />{displayStats.transactions_under_review > 0 && <i />}</button>
+            <button className="icon-button" aria-label="Notifications" onClick={() => setActiveNav(role === 'OFFICER' ? 'Pending Reviews' : 'Audit Logs')}><Bell size={18} />{displayStats.transactions_under_review > 0 && <i />}</button>
             <button className="profile-trigger" onClick={() => setShowProfileModal(true)}>
               <div className="top-avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
               <span>{currentUser?.full_name ?? 'Officer User'}</span><ChevronDown size={15} />
@@ -121,7 +131,7 @@ export default function App() {
           </div>
         </header>
         <div className="content-wrap">
-          {activeNav === 'Dashboard' && role === 'ADMIN' && <AdminDashboard stats={displayStats} currentUser={currentUser} />}
+          {activeNav === 'Dashboard' && role === 'ADMIN' && <AdminDashboard stats={displayStats} currentUser={currentUser} onNavigate={(p) => setActiveNav(p)} />}
           {activeNav === 'Dashboard' && role === 'AUDITOR' && <AuditorDashboard stats={displayStats} onNavigate={(p) => setActiveNav(p)} />}
           {activeNav === 'Dashboard' && role === 'OFFICER' && <OfficerDashboard
             stats={displayStats}
