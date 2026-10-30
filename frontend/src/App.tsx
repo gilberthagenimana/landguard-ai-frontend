@@ -156,11 +156,12 @@ export default function App() {
               onNavigateToEvidence={() => {
                 setActiveNav('Evidence')
               }}
+              canManageTransactions={role === 'ADMIN'}
             />
           )}
           {activeNav === 'Evidence' && <EvidencePage />}
           {activeNav === 'Evidence Review' && <EvidenceReviewPage />}
-          {activeNav === 'Transactions Overview' && <TransactionsPage onNavigateToVerification={(txId) => { setSelectedVerificationTxId(txId); setActiveNav('Verification') }} onNavigateToEvidence={() => setActiveNav('Evidence Review')} />}
+          {activeNav === 'Transactions Overview' && <TransactionsPage canManageTransactions={false} onNavigateToVerification={(txId) => { setSelectedVerificationTxId(txId); setActiveNav('Verification') }} onNavigateToEvidence={() => setActiveNav('Evidence Review')} />}
           {activeNav === 'Verification' && <VerificationPage initialTxId={selectedVerificationTxId} />}
           {activeNav === 'Pending Reviews' && <PendingReviewsPage />}
           {activeNav === 'Audit Logs' && <AuditLogsPage />}
@@ -713,11 +714,17 @@ function DeleteTransactionModal({
   tx,
   onClose,
   onConfirm,
+  onArchive,
+  deletionReason,
+  onDeletionReasonChange,
   deleting,
 }: {
   tx: TransactionRecord
   onClose: () => void
   onConfirm: () => void
+  onArchive?: () => void
+  deletionReason: string
+  onDeletionReasonChange: (reason: string) => void
   deleting: boolean
 }) {
   return (
@@ -773,19 +780,39 @@ function DeleteTransactionModal({
         </div>
 
         <p style={{ fontSize: '12px', color: '#dc2626', margin: '0 0 16px', background: '#fef2f2', padding: '8px 12px', border: '1px solid #fecaca', borderRadius: '8px' }}>
-          This will permanently delete this transaction and any linked verification records or evidence.
+          {tx.status === 'COMPLETED'
+            ? 'Completed transactions cannot be permanently deleted. Archive this transaction to preserve its history.'
+            : 'This will permanently delete this transaction and its linked records. An Admin deletion reason is required.'}
         </p>
+        {tx.status !== 'COMPLETED' && (
+          <label style={{ display: 'block', marginBottom: '16px', fontSize: '12px', color: '#334155' }}>
+            Deletion reason
+            <textarea
+              value={deletionReason}
+              onChange={(event) => onDeletionReasonChange(event.target.value)}
+              placeholder="Explain why this transaction should be permanently deleted"
+              rows={3}
+              disabled={deleting}
+              style={{ display: 'block', width: '100%', marginTop: '6px', resize: 'vertical' }}
+            />
+          </label>
+        )}
 
         <div className="modal-actions">
           <button type="button" className="btn-secondary btn-sm" onClick={onClose} disabled={deleting}>
             Cancel
           </button>
+          {tx.status === 'COMPLETED' && onArchive && (
+            <button type="button" className="btn-secondary btn-sm" onClick={onArchive} disabled={deleting}>
+              {deleting ? 'Saving...' : 'Archive Transaction'}
+            </button>
+          )}
           <button
             type="button"
             className="btn-primary btn-sm"
             style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#fff' }}
             onClick={onConfirm}
-            disabled={deleting}
+            disabled={deleting || tx.status === 'COMPLETED' || !deletionReason.trim()}
           >
             {deleting ? 'Deleting...' : 'Delete Transaction'}
           </button>
@@ -803,11 +830,13 @@ function TransactionsPage({
   onCloseCreate,
   onNavigateToVerification,
   onNavigateToEvidence,
+  canManageTransactions = false,
 }: {
   initialOpenCreate?: boolean
   onCloseCreate?: () => void
   onNavigateToVerification?: (txId: number) => void
   onNavigateToEvidence?: (txId: number) => void
+  canManageTransactions?: boolean
 }) {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [filter, setFilter] = useState('ALL')
@@ -822,6 +851,7 @@ function TransactionsPage({
   const [showCreateModal, setShowCreateModal] = useState(initialOpenCreate)
   const [viewTx, setViewTx] = useState<TransactionRecord | null>(null)
   const [deleteTx, setDeleteTx] = useState<TransactionRecord | null>(null)
+  const [deletionReason, setDeletionReason] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [banner, setBanner] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -872,19 +902,48 @@ function TransactionsPage({
 
   const handleDeleteTransaction = async () => {
     if (!deleteTx) return
+    const reason = deletionReason.trim()
+    if (!reason) {
+      setBanner({ message: 'Enter a reason before permanently deleting this transaction.', type: 'error' })
+      return
+    }
     setDeleting(true)
     try {
-      await api.deleteTransaction(deleteTx.id)
+      await api.deleteTransaction(deleteTx.id, reason)
       setBanner({
         message: `Transaction ${deleteTx.transaction_code || `TX-${deleteTx.id}`} was deleted successfully.`,
         type: 'success',
       })
       if (viewTx?.id === deleteTx.id) setViewTx(null)
       setDeleteTx(null)
-      loadTransactions()
+      setDeletionReason('')
+      await loadTransactions()
     } catch (err) {
       setBanner({
         message: err instanceof Error ? err.message : 'Failed to delete transaction.',
+        type: 'error',
+      })
+    } finally {
+      setDeleting(false)
+    }
+
+  }
+
+  const handleArchiveTransaction = async () => {
+    if (!deleteTx) return
+    setDeleting(true)
+    try {
+      await api.archiveTransaction(deleteTx.id)
+      setBanner({
+        message: `Transaction ${deleteTx.transaction_code || `TX-${deleteTx.id}`} was archived. Its history was preserved.`,
+        type: 'success',
+      })
+      setDeleteTx(null)
+      setDeletionReason('')
+      await loadTransactions()
+    } catch (err) {
+      setBanner({
+        message: err instanceof Error ? err.message : 'Failed to archive transaction.',
         type: 'error',
       })
     } finally {
@@ -1034,14 +1093,16 @@ function TransactionsPage({
                         <button className="btn-icon" onClick={() => setViewTx(tx)} title="View transaction details">
                           <Eye size={14} />
                         </button>
-                        <button
-                          className="btn-icon btn-icon--danger"
-                          style={{ color: '#ef4444' }}
-                          onClick={() => setDeleteTx(tx)}
-                          title="Delete transaction (remove unwanted or accidental entry)"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {canManageTransactions && (
+                          <button
+                            className="btn-icon btn-icon--danger"
+                            style={{ color: '#ef4444' }}
+                            onClick={() => { setDeletionReason(''); setDeleteTx(tx) }}
+                            title="Manage transaction deletion or archival"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1082,7 +1143,7 @@ function TransactionsPage({
           onClose={() => setViewTx(null)}
           onVerify={(txId) => onNavigateToVerification?.(txId)}
           onUploadEvidence={(txId) => onNavigateToEvidence?.(txId)}
-          onDelete={(tx) => setDeleteTx(tx)}
+          onDelete={canManageTransactions ? (tx) => { setDeletionReason(''); setDeleteTx(tx) } : undefined}
         />
       )}
 
@@ -1091,6 +1152,9 @@ function TransactionsPage({
           tx={deleteTx}
           onClose={() => setDeleteTx(null)}
           onConfirm={handleDeleteTransaction}
+          onArchive={handleArchiveTransaction}
+          deletionReason={deletionReason}
+          onDeletionReasonChange={setDeletionReason}
           deleting={deleting}
         />
       )}

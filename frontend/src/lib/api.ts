@@ -62,7 +62,8 @@ export const api = {
   transactions: () => request<TransactionRecord[]>('/api/transactions'),
   transaction: (id: number) => request<TransactionRecord>(`/api/transactions/${id}`),
   createTransaction: (payload: object) => request<TransactionRecord>('/api/transactions', { method: 'POST', body: JSON.stringify(payload) }),
-  deleteTransaction: (id: number) => request(`/api/transactions/${id}`, { method: 'DELETE' }),
+  deleteTransaction: (id: number, reason: string) => request(`/api/transactions/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
+  archiveTransaction: (id: number) => request<TransactionRecord>(`/api/transactions/${id}/archive`, { method: 'POST' }),
   verify: (id: number) => request<VerificationResponse>(`/api/verification/transactions/${id}`, { method: 'POST' }),
 
   storedVerification: (id: number) => request<VerificationResult[]>(`/api/transactions/${id}/verification`),
@@ -216,6 +217,9 @@ export type TransactionRecord = {
   status: string
   latest_risk_level?: string | null
   latest_risk_score?: number | null
+  is_disposable?: boolean
+  is_archived?: boolean
+  archived_at?: string | null
 }
 export type VerificationResult = { rule_name: string; status: string; severity: string; explanation: string }
 export type VerificationResponse = { transaction_id: number; overall_status: string; verified_at: string; results: VerificationResult[] }
