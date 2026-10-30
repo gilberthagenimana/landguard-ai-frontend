@@ -62,7 +62,9 @@ export const api = {
   transactions: () => request<TransactionRecord[]>('/api/transactions'),
   transaction: (id: number) => request<TransactionRecord>(`/api/transactions/${id}`),
   createTransaction: (payload: object) => request<TransactionRecord>('/api/transactions', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteTransaction: (id: number) => request(`/api/transactions/${id}`, { method: 'DELETE' }),
   verify: (id: number) => request<VerificationResponse>(`/api/verification/transactions/${id}`, { method: 'POST' }),
+
   storedVerification: (id: number) => request<VerificationResult[]>(`/api/transactions/${id}/verification`),
   analyze: (id: number) => request<RiskResponse>(`/api/risk-analysis/transactions/${id}`, { method: 'POST' }),
   storedRisk: (id: number) => request<RiskResponse[]>(`/api/risk-analysis/transactions/${id}`),

@@ -4,9 +4,10 @@ import {
   AlertTriangle, ArrowRight, Bell, Check, CheckCircle, ChevronDown,
   ClipboardCheck, Clock, Download, FileText, Flag, FolderOpen, LayoutDashboard,
   LogOut, MapPin, Menu, Plus, Search, Shield, ShieldCheck, Upload,
-  UserPlus, UserRound, Users, X, Eye, FileIcon, AlertCircle, Info, Filter, RotateCcw,
+  UserPlus, UserRound, Users, X, Eye, Trash2, FileIcon, AlertCircle, Info, Filter, RotateCcw,
   ArrowLeftRight, BarChart3, ClipboardList, Settings,
 } from 'lucide-react'
+
 import {
   api, type AuthSession, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
   type DashboardStats, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
@@ -609,11 +610,13 @@ function TransactionDetailModal({
   onClose,
   onVerify,
   onUploadEvidence,
+  onDelete,
 }: {
   tx: TransactionRecord
   onClose: () => void
   onVerify?: (txId: number) => void
   onUploadEvidence?: (txId: number) => void
+  onDelete?: (tx: TransactionRecord) => void
 }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -674,8 +677,20 @@ function TransactionDetailModal({
           </div>
         )}
 
-        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-          <button className="btn-secondary" onClick={onClose}>Close</button>
+        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn-secondary" onClick={onClose}>Close</button>
+            {onDelete && (
+              <button
+                className="btn-secondary"
+                style={{ color: '#ef4444' }}
+                onClick={() => { onClose(); onDelete(tx); }}
+                title="Delete unwanted or accidental transaction"
+              >
+                <Trash2 size={14} /> Delete
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {onUploadEvidence && (
               <button className="btn-secondary" onClick={() => { onClose(); onUploadEvidence(tx.id); }}>
@@ -688,6 +703,92 @@ function TransactionDetailModal({
               </button>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DeleteTransactionModal({
+  tx,
+  onClose,
+  onConfirm,
+  deleting,
+}: {
+  tx: TransactionRecord
+  onClose: () => void
+  onConfirm: () => void
+  deleting: boolean
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-window"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-tx-title"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '480px' }}
+      >
+        <div className="modal-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <Trash2 size={18} />
+            </div>
+            <div>
+              <h2 id="delete-tx-title" style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>
+                Delete Transaction
+              </h2>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                Remove unwanted entry or transaction created by accident.
+              </p>
+            </div>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        <div style={{ margin: '14px 0', fontSize: '13px', color: '#334155', lineHeight: 1.5 }}>
+          Are you sure you want to delete transaction <strong>{tx.transaction_code || `TX-${tx.id}`}</strong>?
+        </div>
+
+        <div className="detail-card" style={{ marginBottom: '16px', background: '#f8fafc', border: '1px solid var(--border-line)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+            <div><span style={{ color: '#64748b' }}>Parcel:</span> <strong>{tx.parcel_code || `Parcel #${tx.parcel_id}`}</strong></div>
+            <div><span style={{ color: '#64748b' }}>Status:</span> <strong>{tx.status}</strong></div>
+            <div><span style={{ color: '#64748b' }}>Seller:</span> <strong>{tx.seller_name || 'N/A'}</strong></div>
+            <div><span style={{ color: '#64748b' }}>Buyer:</span> <strong>{tx.buyer_name || 'N/A'}</strong></div>
+            <div><span style={{ color: '#64748b' }}>Declared Value:</span> <strong>{Number(tx.declared_value || 0).toLocaleString()} RWF</strong></div>
+            <div><span style={{ color: '#64748b' }}>Date:</span> <strong>{new Date(tx.transaction_date).toLocaleDateString()}</strong></div>
+          </div>
+        </div>
+
+        <p style={{ fontSize: '12px', color: '#dc2626', margin: '0 0 16px', background: '#fef2f2', padding: '8px 12px', border: '1px solid #fecaca', borderRadius: '8px' }}>
+          This will permanently delete this transaction and any linked verification records or evidence.
+        </p>
+
+        <div className="modal-actions">
+          <button type="button" className="btn-secondary btn-sm" onClick={onClose} disabled={deleting}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#fff' }}
+            onClick={onConfirm}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting...' : 'Delete Transaction'}
+          </button>
         </div>
       </div>
     </div>
@@ -720,9 +821,12 @@ function TransactionsPage({
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(initialOpenCreate)
   const [viewTx, setViewTx] = useState<TransactionRecord | null>(null)
-  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
+  const [deleteTx, setDeleteTx] = useState<TransactionRecord | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 10
+
 
   const loadTransactions = async () => {
     setLoading(true)
@@ -766,7 +870,30 @@ function TransactionsPage({
     setCurrentPage(1)
   }
 
+  const handleDeleteTransaction = async () => {
+    if (!deleteTx) return
+    setDeleting(true)
+    try {
+      await api.deleteTransaction(deleteTx.id)
+      setBanner({
+        message: `Transaction ${deleteTx.transaction_code || `TX-${deleteTx.id}`} was deleted successfully.`,
+        type: 'success',
+      })
+      if (viewTx?.id === deleteTx.id) setViewTx(null)
+      setDeleteTx(null)
+      loadTransactions()
+    } catch (err) {
+      setBanner({
+        message: err instanceof Error ? err.message : 'Failed to delete transaction.',
+        type: 'error',
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const hasActiveFilters = filter !== 'ALL' || appliedSearch !== '' || appliedStartDate !== '' || appliedEndDate !== ''
+
 
   const filtered = transactions.filter((tx) => {
     // Status filter
@@ -903,9 +1030,19 @@ function TransactionsPage({
                     </td>
                     <td>{new Date(tx.transaction_date).toLocaleDateString()}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-icon" onClick={() => setViewTx(tx)} title="View transaction details">
-                        <Eye size={14} />
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                        <button className="btn-icon" onClick={() => setViewTx(tx)} title="View transaction details">
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          className="btn-icon btn-icon--danger"
+                          style={{ color: '#ef4444' }}
+                          onClick={() => setDeleteTx(tx)}
+                          title="Delete transaction (remove unwanted or accidental entry)"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -945,11 +1082,22 @@ function TransactionsPage({
           onClose={() => setViewTx(null)}
           onVerify={(txId) => onNavigateToVerification?.(txId)}
           onUploadEvidence={(txId) => onNavigateToEvidence?.(txId)}
+          onDelete={(tx) => setDeleteTx(tx)}
+        />
+      )}
+
+      {deleteTx && (
+        <DeleteTransactionModal
+          tx={deleteTx}
+          onClose={() => setDeleteTx(null)}
+          onConfirm={handleDeleteTransaction}
+          deleting={deleting}
         />
       )}
     </div>
   )
 }
+
 
 /* =========================================================================
    EVIDENCE PAGE
