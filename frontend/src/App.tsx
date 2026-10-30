@@ -139,14 +139,6 @@ export default function App() {
             onNavigate={(p) => setActiveNav(p)}
             onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
           />}
-          {activeNav === 'Dashboard' && !['ADMIN', 'AUDITOR', 'OFFICER'].includes(role) && (
-            <DashboardView
-              stats={displayStats}
-              currentUser={currentUser}
-              onNavigate={(p) => setActiveNav(p)}
-              onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
-            />
-          )}
           {activeNav === 'User Management' && <UserManagementPage />}
           {activeNav === 'System Settings' && <SystemSettingsPage />}
           {activeNav === 'Search Parcel' && <SearchParcelPage />}
@@ -237,202 +229,6 @@ function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: Current
 }
 
 /* =========================================================================
-   DASHBOARD VIEW — matches screenshot exactly
-   ========================================================================= */
-function DashboardView({
-  stats,
-  currentUser,
-  onNavigate,
-  onNewTransaction,
-}: {
-  stats: DashboardStats
-  currentUser: CurrentUser | null
-  onNavigate: (page: string) => void
-  onNewTransaction?: () => void
-}) {
-  const total = stats.total_transactions || 24
-  const completed = stats.low_risk_transactions || 16
-  const underReview = stats.transactions_under_review || 5
-  const flagged = stats.high_risk_transactions || 3
-  const medium = stats.medium_risk_transactions || 5
-
-  const recentTxs = [
-    { id: 'TX-001', upi: 'UPI-001', seller: 'Jean', buyer: 'Patrick', amount: 30000000, status: 'Completed', risk: 'Low', date: 'Apr 21, 2025' },
-    { id: 'TX-002', upi: 'UPI-002', seller: 'Alice', buyer: 'Samuel', amount: 45000000, status: 'Under Review', risk: 'Medium', date: 'Apr 20, 2025' },
-    { id: 'TX-003', upi: 'UPI-003', seller: 'Emmanuel', buyer: 'Grace', amount: 12000000, status: 'Pending', risk: 'Low', date: 'Apr 19, 2025' },
-    { id: 'TX-004', upi: 'UPI-004', seller: 'Claude', buyer: 'Denis', amount: 25000000, status: 'Flagged', risk: 'High', date: 'Apr 18, 2025' },
-    { id: 'TX-005', upi: 'UPI-005', seller: 'Marie', buyer: 'David', amount: 50000000, status: 'Completed', risk: 'Low', date: 'Apr 17, 2025' },
-    { id: 'TX-006', upi: 'UPI-006', seller: 'Robert', buyer: 'Fidele', amount: 18000000, status: 'Under Review', risk: 'Medium', date: 'Apr 16, 2025' },
-  ]
-
-  const evidenceUploads = [
-    { doc: 'Sale Agreement.pdf', tx: 'TX-002', by: 'Jean', status: 'Under Review', date: 'Apr 20, 2025' },
-    { doc: 'Payment Receipt.pdf', tx: 'TX-001', by: 'Jean', status: 'Verified', date: 'Apr 19, 2025' },
-    { doc: 'Payment Proof.pdf', tx: 'TX-006', by: 'Alice', status: 'Needs Clarification', date: 'Apr 16, 2025' },
-    { doc: 'Agreement.png', tx: 'TX-003', by: 'Jean', status: 'Uploaded', date: 'Apr 15, 2025' },
-  ]
-
-  const alerts = [
-    { icon: AlertCircle, color: 'red', title: 'Possible duplicate transaction detected', meta: 'TX-004 • Apr 18, 2025' },
-    { icon: AlertTriangle, color: 'amber', title: 'Seller does not match recorded owner', meta: 'TX-007 • Apr 16, 2025' },
-    { icon: AlertTriangle, color: 'amber', title: 'Missing payment evidence', meta: 'TX-008 • Apr 15, 2025' },
-  ]
-
-  const maxBar = Math.max(completed, underReview, 2, flagged)
-  const lowOffset = 0.71 * 283
-  const medOffset = 0.21 * 283
-  const highOffset = 0.08 * 283
-  const medDashOffset = -(0.71 * 283)
-  const highDashOffset = -(0.92 * 283)
-
-  return (
-    <div className="workspace-page search-parcel-page">
-      {/* Header */}
-      <div className="dash-header">
-        <div>
-          <h1>Welcome back, {currentUser?.full_name?.split(' ')[0] ?? 'Jean'}!</h1>
-          <p>Here's what's happening with land transactions today.</p>
-        </div>
-        <div className="dash-date">
-          <div className="dash-date-icon"><FileText size={14} /></div>
-          <div><strong>April 23, 2025</strong><span>10:45 AM</span></div>
-        </div>
-      </div>
-
-      <div className="dash-grid">
-        {/* Main column */}
-        <div className="dash-main">
-          {/* Metric Cards */}
-          <div className="dash-metrics">
-            <div className="metric-card">
-              <div className="metric-icon" style={{ background: '#dbeafe' }}><FileText size={20} color="#2563eb" /></div>
-              <div><span className="metric-label">Total Transactions</span><strong>24 <small className="trend-up">↑ 8%</small></strong><small className="metric-sub">Compared to last 7 days</small></div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-icon" style={{ background: '#d1fae5' }}><CheckCircle size={20} color="#10b981" /></div>
-              <div><span className="metric-label">Completed</span><strong>16 <small className="trend-up">↑ 14%</small></strong><small className="metric-sub">Successfully completed</small></div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-icon" style={{ background: '#fef3c7' }}><AlertTriangle size={20} color="#f59e0b" /></div>
-              <div><span className="metric-label">Under Review</span><strong>5 <small className="trend-up">↑ 25%</small></strong><small className="metric-sub">Awaiting officer review</small></div>
-            </div>
-            <div className="metric-card">
-              <div className="metric-icon" style={{ background: '#fee2e2' }}><AlertTriangle size={20} color="#ef4444" /></div>
-              <div><span className="metric-label">Flagged / High Risk</span><strong>3 <small className="trend-down">↓ 33%</small></strong><small className="metric-sub">Needs attention</small></div>
-            </div>
-          </div>
-
-          {/* Recent Transactions */}
-          <div className="card">
-            <div className="card-header"><h3>Recent Transactions</h3><button className="link-btn" onClick={() => onNavigate('Transactions')}>View All</button></div>
-            <table className="data-table">
-              <thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller</th><th>Buyer</th><th>Amount (RWF)</th><th>Status</th><th>Risk</th><th>Date</th></tr></thead>
-              <tbody>
-                {recentTxs.map((tx) => (
-                  <tr key={tx.id} className={tx.status === 'Flagged' ? 'row--flagged' : ''}>
-                    <td><strong>{tx.id}</strong></td><td>{tx.upi}</td><td>{tx.seller}</td><td>{tx.buyer}</td>
-                    <td>{Number(tx.amount).toLocaleString()}</td>
-                    <td><span className={`status-badge status-${tx.status.toLowerCase().replace(' ', '-')}`}>{tx.status}</span></td>
-                    <td><span className={`risk-badge risk-${tx.risk.toLowerCase()}`}>{tx.risk}</span></td>
-                    <td>{tx.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Bottom row: Status Overview + Evidence Uploads */}
-          <div className="dash-bottom">
-            <div className="card">
-              <div className="card-header"><h3>Transaction Status Overview</h3></div>
-              <div className="bar-chart">
-                {[{ label: 'Completed', value: completed, color: '#10b981' }, { label: 'Under Review', value: underReview, color: '#2563eb' }, { label: 'Pending', value: 2, color: '#f59e0b' }, { label: 'Flagged', value: flagged, color: '#ef4444' }].map((bar) => (
-                  <div key={bar.label} className="bar-col">
-                    <span className="bar-value">{bar.value}</span>
-                    <div className="bar-wrap"><div className="bar" style={{ height: `${(bar.value / maxBar) * 120}px`, background: bar.color }} /></div>
-                    <span className="bar-label">{bar.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="card">
-              <div className="card-header"><h3>Recent Evidence Uploads</h3><button className="link-btn" onClick={() => onNavigate('Evidence')}>View All</button></div>
-              <table className="data-table">
-                <thead><tr><th>Document</th><th>Transaction</th><th>Uploaded By</th><th>Status</th><th>Date</th></tr></thead>
-                <tbody>
-                  {evidenceUploads.map((ev, i) => (
-                    <tr key={i}>
-                      <td><span className="doc-name"><FileIcon size={14} /> {ev.doc}</span></td>
-                      <td>{ev.tx}</td><td>{ev.by}</td>
-                      <td><span className={`evidence-badge evidence-${ev.status.toLowerCase().replace(/ /g, '-')}`}>{ev.status}</span></td>
-                      <td>{ev.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <footer className="dash-footer">
-            <Info size={16} />
-            <span>Note: This system helps verify land transactions and identify potential risks. It does not replace official land registry services or legal procedures.</span>
-            <button className="link-btn">Learn more →</button>
-          </footer>
-        </div>
-
-        {/* Right Sidebar */}
-        <aside className="dash-sidebar">
-          {/* AI Risk Analysis */}
-          <div className="card">
-            <div className="card-header"><h3><Shield size={16} /> AI Risk Analysis</h3></div>
-            <p className="card-sub">Based on recent transactions</p>
-            <div className="donut-wrap">
-              <svg width="110" height="110" viewBox="0 0 110 110">
-                <circle cx="55" cy="55" r="45" fill="none" stroke="#e5e7eb" strokeWidth="12" />
-                <circle cx="55" cy="55" r="45" fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray={`${lowOffset} 283`} strokeDashoffset="0" transform="rotate(-90 55 55)" />
-                <circle cx="55" cy="55" r="45" fill="none" stroke="#f59e0b" strokeWidth="12" strokeDasharray={`${medOffset} 283`} strokeDashoffset={medDashOffset} transform="rotate(-90 55 55)" />
-                <circle cx="55" cy="55" r="45" fill="none" stroke="#ef4444" strokeWidth="12" strokeDasharray={`${highOffset} 283`} strokeDashoffset={highDashOffset} transform="rotate(-90 55 55)" />
-              </svg>
-              <div className="donut-center"><strong>24</strong><span>Total</span></div>
-            </div>
-            <div className="donut-legend">
-              <div><span className="dot" style={{ background: '#10b981' }} /> Low Risk <strong>17 (71%)</strong></div>
-              <div><span className="dot" style={{ background: '#f59e0b' }} /> Medium Risk <strong>5 (21%)</strong></div>
-              <div><span className="dot" style={{ background: '#ef4444' }} /> High Risk <strong>2 (8%)</strong></div>
-            </div>
-          </div>
-
-          {/* Recent Alerts */}
-          <div className="card">
-            <div className="card-header"><h3><AlertTriangle size={16} /> Recent Alerts</h3><button className="link-btn">View All</button></div>
-            <div className="alert-list">
-              {alerts.map((a, i) => (
-                <div key={i} className="alert-item">
-                  <div className={`alert-icon alert-icon--${a.color}`}><a.icon size={14} /></div>
-                  <div><strong>{a.title}</strong><span>{a.meta}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="card">
-            <div className="card-header"><h3>Quick Actions</h3></div>
-            <div className="quick-actions">
-              <button className="quick-action" onClick={() => onNavigate('Search Parcel')}><Search size={16} /> Search Parcel by UPI</button>
-              <button className="quick-action" onClick={() => { if (onNewTransaction) onNewTransaction(); else onNavigate('Transactions') }}><Plus size={16} /> Create New Transaction</button>
-              <button className="quick-action" onClick={() => onNavigate('Evidence')}><Upload size={16} /> Upload Evidence Document</button>
-              <button className="quick-action" onClick={() => {}}><ClipboardCheck size={16} /> View Audit Logs</button>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-  )
-}
-
-/* =========================================================================
    SEARCH PARCEL PAGE
    ========================================================================= */
 function SearchParcelPage() {
@@ -480,7 +276,7 @@ function SearchParcelPage() {
       <div className="page-heading"><div><h1>Search Parcel</h1><p className="heading-subtitle">Find parcel records and review recorded ownership information.</p></div></div>
       <form onSubmit={search} className="search-bar">
         <label className="search-parcel-label" htmlFor="parcel-upi">Enter UPI (Unique Parcel Identifier)</label>
-        <div className="search-input-wrap"><Search size={16} className="search-icon" /><input id="parcel-upi" type="text" placeholder="e.g. UPI-001" value={upi} onChange={(e) => setUpi(e.target.value)} className="search-input" /></div>
+        <div className="search-input-wrap"><Search size={16} className="search-icon" /><input id="parcel-upi" type="text" placeholder="Enter parcel UPI" value={upi} onChange={(e) => setUpi(e.target.value)} className="search-input" /></div>
         <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Searching...' : 'Search'}</button><button type="button" className="btn-secondary" onClick={clearSearch} disabled={loading && !parcel}>Clear</button>
       </form>
       {error && <div className="alert alert--error">{error}</div>}
@@ -524,45 +320,11 @@ function SearchParcelPage() {
 }
 
 /* =========================================================================
-   TRANSACTIONS DATA & MODALS
-   ========================================================================= */
-const fallbackTransactions: TransactionRecord[] = [
-  { id: 9, transaction_code: 'TX-98239', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Patrick Habimana', seller_owner_id: 1, buyer_owner_id: 8, transaction_type: 'SALE', transaction_date: '2026-10-18T20:00:00Z', declared_value: 30000000, status: 'PENDING', latest_risk_level: 'LOW' },
-  { id: 8, transaction_code: 'TX-98238', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Claudine Ingabire', buyer_name: 'Thierry Uwimana', seller_owner_id: 4, buyer_owner_id: 10, transaction_type: 'SALE', transaction_date: '2026-10-17T13:51:39Z', declared_value: 10100000, status: 'PENDING', latest_risk_level: 'LOW' },
-  { id: 7, transaction_code: 'TX-98237', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Grace Mutesi', seller_owner_id: 1, buyer_owner_id: 9, transaction_type: 'SALE', transaction_date: '2026-10-16T16:51:39Z', declared_value: 19000000, status: 'PENDING', latest_risk_level: 'HIGH' },
-  { id: 6, transaction_code: 'TX-98236', parcel_id: 6, parcel_code: 'RW-77890', seller_name: 'Solange Mukamana', buyer_name: 'Thierry Uwimana', seller_owner_id: 6, buyer_owner_id: 10, transaction_type: 'SALE', transaction_date: '2026-10-15T12:51:39Z', declared_value: 31000000, status: 'PENDING', latest_risk_level: 'HIGH' },
-  { id: 5, transaction_code: 'TX-98235', parcel_id: 5, parcel_code: 'RW-55621', seller_name: 'Patrick Habimana', buyer_name: 'Felix Byiringiro', seller_owner_id: 5, buyer_owner_id: 8, transaction_type: 'INHERITANCE', transaction_date: '2026-10-12T18:51:39Z', declared_value: 8200000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM' },
-  { id: 4, transaction_code: 'TX-98234', parcel_id: 4, parcel_code: 'RW-33107', seller_name: 'Claudine Ingabire', buyer_name: 'Diane Nsengimana', seller_owner_id: 4, buyer_owner_id: 7, transaction_type: 'SALE', transaction_date: '2026-10-10T18:51:39Z', declared_value: 15100000, status: 'VERIFIED', latest_risk_level: 'LOW' },
-  { id: 3, transaction_code: 'TX-98233', parcel_id: 3, parcel_code: 'RW-20991', seller_name: 'Eric Nkurunziza', buyer_name: 'Grace Mutesi', seller_owner_id: 3, buyer_owner_id: 9, transaction_type: 'TRANSFER', transaction_date: '2026-10-08T18:51:39Z', declared_value: 9700000, status: 'UNDER_REVIEW', latest_risk_level: 'HIGH' },
-  { id: 2, transaction_code: 'TX-98232', parcel_id: 2, parcel_code: 'RW-88213', seller_name: 'Alice Uwase', buyer_name: 'Felix Byiringiro', seller_owner_id: 2, buyer_owner_id: 8, transaction_type: 'SALE', transaction_date: '2026-10-05T18:51:39Z', declared_value: 24000000, status: 'UNDER_REVIEW', latest_risk_level: 'MEDIUM' },
-  { id: 1, transaction_code: 'TX-98231', parcel_id: 1, parcel_code: 'RW-10432', seller_name: 'Jean Mugisha', buyer_name: 'Diane Nsengimana', seller_owner_id: 1, buyer_owner_id: 7, transaction_type: 'SALE', transaction_date: '2026-10-01T18:51:39Z', declared_value: 18500000, status: 'VERIFIED', latest_risk_level: 'LOW' },
-]
-
-const initialParcels = [
-  { id: 1, upi: 'RW-10432', parcel_code: 'RW-10432', owner_id: 1, owner_name: 'Jean Mugisha', location: 'Kicukiro / Niboye' },
-  { id: 2, upi: 'RW-88213', parcel_code: 'RW-88213', owner_id: 2, owner_name: 'Alice Uwase', location: 'Gasabo / Kimironko' },
-  { id: 3, upi: 'RW-20991', parcel_code: 'RW-20991', owner_id: 3, owner_name: 'Eric Nkurunziza', location: 'Nyarugenge / Nyamirambo' },
-  { id: 4, upi: 'RW-33107', parcel_code: 'RW-33107', owner_id: 4, owner_name: 'Claudine Ingabire', location: 'Kicukiro / Gahanga' },
-  { id: 5, upi: 'RW-55621', parcel_code: 'RW-55621', owner_id: 5, owner_name: 'Patrick Habimana', location: 'Gasabo / Remera' },
-  { id: 6, upi: 'RW-77890', parcel_code: 'RW-77890', owner_id: 6, owner_name: 'Solange Mukamana', location: 'Bugesera / Nyamata' },
-]
-
-const initialOwners = [
-  { id: 1, name: 'Jean Mugisha', code: 'OWN-001' },
-  { id: 2, name: 'Alice Uwase', code: 'OWN-002' },
-  { id: 3, name: 'Eric Nkurunziza', code: 'OWN-003' },
-  { id: 4, name: 'Claudine Ingabire', code: 'OWN-004' },
-  { id: 5, name: 'Patrick Habimana', code: 'OWN-005' },
-  { id: 6, name: 'Solange Mukamana', code: 'OWN-006' },
-  { id: 7, name: 'Diane Nsengimana', code: 'OWN-007' },
-  { id: 8, name: 'Felix Byiringiro', code: 'OWN-008' },
-  { id: 9, name: 'Grace Mutesi', code: 'OWN-009' },
-  { id: 10, name: 'Thierry Uwimana', code: 'OWN-010' },
-]
-
-/* =========================================================================
    NEW TRANSACTION MODAL
    ========================================================================= */
+type ParcelSelection = { id: number; upi: string; parcel_code: string; owner_id: number; owner_name: string; location: string }
+type OwnerSelection = { id: number; name: string; code: string }
+
 function NewTransactionModal({
   onClose,
   onCreated,
@@ -570,8 +332,8 @@ function NewTransactionModal({
   onClose: () => void
   onCreated: (tx: TransactionRecord) => void
 }) {
-  const [parcels, setParcels] = useState(initialParcels)
-  const [owners, setOwners] = useState(initialOwners)
+  const [parcels, setParcels] = useState<ParcelSelection[]>([])
+  const [owners, setOwners] = useState<OwnerSelection[]>([])
   const [selectedParcelId, setSelectedParcelId] = useState<number>(1)
   const [sellerId, setSellerId] = useState<number>(1)
   const [buyerId, setBuyerId] = useState<number>(7)
@@ -638,9 +400,6 @@ function NewTransactionModal({
     }
 
     setSubmitting(true)
-    const parcelObj = parcels.find(p => p.id === selectedParcelId)
-    const sellerObj = owners.find(o => o.id === sellerId)
-    const buyerObj = owners.find(o => o.id === buyerId)
 
     const payload = {
       parcel_id: selectedParcelId,
@@ -655,25 +414,8 @@ function NewTransactionModal({
       const result = await api.createTransaction(payload)
       onCreated(result)
       onClose()
-    } catch {
-      // Offline fallback: Create local transaction so demo continues smoothly
-      const fallbackCreated: TransactionRecord = {
-        id: Date.now(),
-        transaction_code: `TX-${Math.floor(10000 + Math.random() * 90000)}`,
-        parcel_id: selectedParcelId,
-        parcel_code: parcelObj?.parcel_code || `RW-${selectedParcelId}`,
-        seller_name: sellerObj?.name || 'Seller',
-        buyer_name: buyerObj?.name || 'Buyer',
-        seller_owner_id: sellerId,
-        buyer_owner_id: buyerId,
-        transaction_type: txType,
-        transaction_date: new Date().toISOString(),
-        declared_value: cleanVal,
-        status: 'PENDING',
-        latest_risk_level: 'LOW',
-      }
-      onCreated(fallbackCreated)
-      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create transaction. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -910,6 +652,7 @@ function TransactionsPage({
   const [appliedStartDate, setAppliedStartDate] = useState('')
   const [appliedEndDate, setAppliedEndDate] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(initialOpenCreate)
   const [viewTx, setViewTx] = useState<TransactionRecord | null>(null)
   const [banner, setBanner] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
@@ -920,13 +663,11 @@ function TransactionsPage({
     setLoading(true)
     try {
       const data = await api.transactions()
-      if (data && data.length > 0) {
-        setTransactions(data)
-      } else {
-        setTransactions(fallbackTransactions)
-      }
-    } catch {
-      setTransactions(fallbackTransactions)
+      setTransactions(data || [])
+      setError('')
+    } catch (err) {
+      setTransactions([])
+      setError(err instanceof Error ? err.message : 'Failed to load transactions. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -1056,7 +797,9 @@ function TransactionsPage({
         )}
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="alert alert--error">Failed to load transactions. Please try again.</div>
+      ) : loading ? (
         <p className="text-muted">Loading transactions...</p>
       ) : (
         <div className="table-card">
@@ -1077,7 +820,7 @@ function TransactionsPage({
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
-                    No transactions match the selected filters.
+                    {transactions.length === 0 ? 'No transactions found. Create a transaction to begin verification.' : 'No transactions match the selected filters.'}
                   </td>
                 </tr>
               ) : (
@@ -1181,11 +924,8 @@ function VerificationPage({ initialTxId }: { initialTxId?: number | null }) {
 
   useEffect(() => {
     api.transactions()
-      .then((txs) => {
-        if (txs && txs.length > 0) setTransactions(txs)
-        else setTransactions(fallbackTransactions)
-      })
-      .catch(() => setTransactions(fallbackTransactions))
+      .then((txs) => setTransactions(txs || []))
+      .catch(() => setTransactions([]))
   }, [])
 
   return (
@@ -1206,22 +946,72 @@ function VerificationPage({ initialTxId }: { initialTxId?: number | null }) {
    PENDING REVIEWS PAGE
    ========================================================================= */
 function PendingReviewsPage() {
+  const [cases, setCases] = useState<CaseRecord[]>([])
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
-  const mockReviews = [
-    { id: 'TX-004', upi: 'UPI-004', seller: 'Denis', buyer: 'Claude', reason: 'High risk score (70%)', evidence: 'Missing', date: 'Apr 18, 2025' },
-    { id: 'TX-006', upi: 'UPI-006', seller: 'Fidele', buyer: 'Alice', reason: 'Payment amount mismatch', evidence: 'Needs Review', date: 'Apr 16, 2025' },
-    { id: 'TX-007', upi: 'UPI-003', seller: 'Samuel', buyer: 'Claudine', reason: 'New owner (7 days)', evidence: 'Partial', date: 'Apr 22, 2025' },
-    { id: 'TX-002', upi: 'UPI-001', seller: 'Jean', buyer: 'Patrick', reason: 'Payment evidence pending', evidence: 'Under Review', date: 'Apr 20, 2025' },
-    { id: 'TX-009', upi: 'UPI-008', seller: 'Joseph', buyer: 'Alice', reason: 'Inconsistent documents', evidence: 'Inconsistent', date: 'Apr 23, 2025' },
-  ]
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([api.cases(), api.transactions()])
+      .then(async ([caseList, txList]) => {
+        if (cancelled) return
+        const list = caseList || []
+        const txListAll = txList || []
+        setCases(list)
+        setTransactions(txListAll)
+      })
+      .catch(() => { if (!cancelled) setError('Unable to load pending reviews.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const openCases = cases.filter((c) => ['OPEN', 'UNDER_REVIEW', 'NEEDS_INFORMATION'].includes(c.status))
+  const txById = new Map(transactions.map((t) => [t.id, t]))
+  const rows = openCases.map((c) => {
+    const tx = txById.get(c.transaction_id)
+    return {
+      key: c.case_code || `CASE-${c.id}`,
+      upi: c.parcel_code || tx?.parcel_code || 'N/A',
+      seller: tx?.seller_name || 'N/A',
+      buyer: tx?.buyer_name || 'N/A',
+      reason: c.review_notes || (c.risk_level ? `AI risk level: ${c.risk_level}` : 'Awaiting review'),
+      evidence: c.status,
+      date: new Date(c.updated_at).toLocaleDateString(),
+      risk: c.risk_level || 'MEDIUM',
+      status: c.status,
+    }
+  })
+  const filteredRows = filter === 'all' ? rows : rows.filter((r) => {
+    if (filter === 'high') return r.risk === 'HIGH'
+    if (filter === 'missing') return r.evidence === 'NEEDS_INFORMATION'
+    if (filter === 'clarification') return r.status === 'UNDER_REVIEW'
+    return true
+  })
+  const tabCounts = {
+    all: rows.length,
+    high: rows.filter((r) => r.risk === 'HIGH').length,
+    missing: rows.filter((r) => r.evidence === 'NEEDS_INFORMATION').length,
+    clarification: rows.filter((r) => r.status === 'UNDER_REVIEW').length,
+  }
 
   return (
     <div className="workspace-page pending-reviews-page">
       <h2 className="page-title">Pending Reviews</h2><p className="page-subtitle">Transactions that need your attention.</p>
-      <div className="filter-tabs"><button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All (5)</button><button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk (2)</button><button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence (1)</button><button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification (2)</button></div>
+      {error ? (
+        <div className="alert alert--error">Failed to load pending reviews. Please try again.</div>
+      ) : loading ? (
+        <p className="text-muted">Loading pending reviews...</p>
+      ) : (
+        <>
+      <div className="filter-tabs"><button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All ({tabCounts.all})</button><button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk ({tabCounts.high})</button><button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence ({tabCounts.missing})</button><button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification ({tabCounts.clarification})</button></div>
       <div className="table-card"><table className="data-table"><thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller → Buyer</th><th>Reason</th><th>Evidence Status</th><th>Date</th><th>Actions</th></tr></thead>
-        <tbody>{mockReviews.map((r) => (<tr key={r.id}><td><strong>{r.id}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(' ', '-')}`}>{r.evidence}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm">Review Details</button></td></tr>))}</tbody></table>
-        <div className="table-footer"><span>Showing 1-5 of 5</span><div className="pagination"><button className="page-btn" disabled>&lt;</button><button className="page-btn page-btn--active">1</button><button className="page-btn" disabled>&gt;</button></div></div></div>
+        <tbody>{filteredRows.length === 0 ? (<tr><td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>No pending reviews found.</td></tr>) : filteredRows.map((r) => (<tr key={r.key}><td><strong>{r.key}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(/_/g, '-')}`}>{r.evidence.replace(/_/g, ' ')}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm">Review Details</button></td></tr>))}</tbody></table>
+        <div className="table-footer"><span>Showing {filteredRows.length} of {rows.length}</span><div className="pagination"><button className="page-btn" disabled>&lt;</button><button className="page-btn page-btn--active">1</button><button className="page-btn" disabled>&gt;</button></div></div>
+        </div>
+        </>
+      )}
     </div>
   )
 }

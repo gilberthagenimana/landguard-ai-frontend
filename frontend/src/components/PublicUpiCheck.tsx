@@ -51,7 +51,7 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
             Enter UPI
             <input
               type="text"
-              placeholder="e.g., UPI-001"
+              placeholder="e.g. RW-10432"
               value={upi}
               onChange={(e) => setUpi(e.target.value)}
               required
