@@ -1233,6 +1233,8 @@ function UserManagementPage() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [showEditUser, setShowEditUser] = useState(false)
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null)
 
   const loadUsers = () => {
     setLoading(true)
@@ -1251,13 +1253,50 @@ function UserManagementPage() {
     }
   }
 
+  const editUser = async (userId: number, payload: { full_name?: string; email?: string; password?: string; is_active?: boolean; role?: string }) => {
+    try {
+      await api.updateUser(userId, payload)
+      setMessage('User updated successfully.')
+      setShowEditUser(false)
+      setEditingUser(null)
+      loadUsers()
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Unable to update user.')
+    }
+  }
+
   return <div>
     <div className="page-heading"><div><h1>User Management</h1><p className="heading-subtitle">Manage authorized personnel and role access.</p></div><button className="btn-primary"><Plus size={15} /> Add User</button></div>
     {message && <div className="alert alert--info">{message}</div>}
     <div className="table-card"><table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead><tbody>
-      {loading ? <tr><td colSpan={6}>Loading users...</td></tr> : users.map((user) => <tr key={user.id}><td><strong>{user.full_name}</strong><br /><span className="text-muted">{user.username || 'No username'}</span></td><td>{user.email}</td><td>{user.roles[0]?.name || 'Unassigned'}</td><td><span className={user.is_active ? 'status-label risk-label--low' : 'status-label risk-label--high'}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td>Not available</td><td>{user.is_active && <button className="btn-secondary btn-sm" onClick={() => disableUser(user.id)}>Revoke</button>}</td></tr>)}
+      {loading ? <tr><td colSpan={6}>Loading users...</td></tr> : users.map((user) => <tr key={user.id}><td><strong>{user.full_name}</strong><br /><span className="text-muted">{user.username || 'No username'}</span></td><td>{user.email}</td><td>{user.roles[0]?.name || 'Unassigned'}</td><td><span className={user.is_active ? 'status-label risk-label--low' : 'status-label risk-label--high'}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td>Not available</td><td>{user.is_active && <button className="btn-secondary btn-sm" onClick={() => disableUser(user.id)}>Revoke</button>}</td><td><button className="btn-secondary btn-sm" onClick={() => { setEditingUser(user); setShowEditUser(true) }}>Edit</button></td></tr>)}
     </tbody></table></div>
+    {showEditUser && editingUser && <EditUserModal user={editingUser} onClose={() => { setShowEditUser(false); setEditingUser(null) }} onSave={(payload) => editUser(editingUser.id, payload)} />}
   </div>
+}
+
+function EditUserModal({ user, onClose, onSave }: { user: UserRecord; onClose: () => void; onSave: (payload: { full_name?: string; email?: string; password?: string; is_active?: boolean; role?: string }) => void }) {
+  const [fullName, setFullName] = useState(user.full_name)
+  const [email, setEmail] = useState(user.email)
+  const [password, setPassword] = useState('')
+  const [isActive, setIsActive] = useState(user.is_active)
+
+  const save = () => {
+    const payload: { full_name?: string; email?: string; password?: string; is_active?: boolean } = { full_name: fullName, email }
+    if (password) payload.password = password
+    payload.is_active = isActive
+    onSave(payload)
+  }
+
+  return <div className="modal-overlay" onClick={onClose}><div className="modal-window" onClick={(e) => e.stopPropagation()}><div className="modal-head"><div><h2>Edit User</h2><p>Update account details and access level.</p></div><button className="icon-button" onClick={onClose}>✕</button></div>
+    <div className="detail-grid">
+      <label>Full Name<input value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+      <label>Password (leave blank to keep current)<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password if reset" /></label>
+      <label>Status<select value={String(isActive)} onChange={(e) => setIsActive(e.target.value === 'true')}><option value="true">Active</option><option value="false">Inactive</option></select></label>
+    </div>
+    <div className="modal-actions"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={save}>Save Changes</button></div>
+  </div></div>
 }
 
 function SystemSettingsPage() {

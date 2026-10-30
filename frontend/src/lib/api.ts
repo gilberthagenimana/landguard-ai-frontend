@@ -29,6 +29,7 @@ export const api = {
   stats: () => request<DashboardStats>('/api/dashboard/stats'),
   users: () => request<UserRecord[]>('/api/users'),
   createUser: (payload: object) => request<UserRecord>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
+  updateUser: (id: number, payload: object) => request<UserRecord>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   disableUser: (id: number) => request(`/api/users/${id}`, { method: 'DELETE' }),
   parcels: (q = '') => request<ParcelRecord[]>(`/api/parcels${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   createParcel: (payload: ParcelCreatePayload) => request<ParcelRecord>('/api/parcels', { method: 'POST', body: JSON.stringify(payload) }),
