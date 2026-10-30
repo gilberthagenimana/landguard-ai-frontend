@@ -15,7 +15,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (response.status === 204) return undefined as T
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const detail = typeof data.detail === 'string' ? data.detail : 'Request failed'
+    let detail = 'Request failed'
+    if (typeof data.detail === 'string') {
+      detail = data.detail
+    } else if (Array.isArray(data.detail)) {
+      detail = data.detail
+        .map((err: { msg?: string; loc?: (string | number)[] }) => {
+          const field = err.loc && err.loc.length > 1 ? `${err.loc[err.loc.length - 1]}: ` : ''
+          return `${field}${err.msg || 'Invalid value'}`
+        })
+        .join('; ')
+    } else if (data.message && typeof data.message === 'string') {
+      detail = data.message
+    }
     throw new Error(detail)
   }
   return data as T
@@ -25,13 +37,18 @@ export const api = {
   login: (email: string, password: string, role: string) =>
     request<{ access_token: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password, role }) }),
   me: () => request<CurrentUser>('/api/auth/me'),
+  updateMe: (payload: { full_name?: string; password?: string }) => request<{ message: string }>('/api/auth/me', { method: 'PUT', body: JSON.stringify(payload) }),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
+  sessions: () => request<AuthSession[]>('/api/auth/sessions'),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   stats: () => request<DashboardStats>('/api/dashboard/stats'),
   users: () => request<UserRecord[]>('/api/users'),
-  createUser: (payload: object) => request<UserRecord>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
-  updateUser: (id: number, payload: object) => request<UserRecord>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  createUser: (payload: CreateUserPayload | object) => request<UserRecord>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
+  updateUser: (id: number, payload: UpdateUserPayload | object) => request<UserRecord>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   disableUser: (id: number) => request(`/api/users/${id}`, { method: 'DELETE' }),
+  reactivateUser: (id: number) => request<UserRecord>(`/api/users/${id}/reactivate`, { method: 'POST' }),
   parcels: (q = '') => request<ParcelRecord[]>(`/api/parcels${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+
   createParcel: (payload: ParcelCreatePayload) => request<ParcelRecord>('/api/parcels', { method: 'POST', body: JSON.stringify(payload) }),
   parcelByUpi: (upi: string) => request<ParcelRecord>(`/api/parcels/upi/${encodeURIComponent(upi)}`),
   submitParcelLocation: (parcelId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/${parcelId}/location-submissions`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -103,6 +120,31 @@ export type ParcelCreatePayload = {
 export type RoleRecord = { name: string }
 export type CurrentUser = { id: number; username?: string; full_name: string; email: string; is_active: boolean; roles: string[] }
 export type UserRecord = Omit<CurrentUser, 'roles'> & { roles: RoleRecord[] }
+export type CreateUserPayload = {
+  full_name: string
+  email: string
+  username?: string
+  password: string
+  role: 'ADMIN' | 'OFFICER' | 'AUDITOR'
+  is_active?: boolean
+}
+export type UpdateUserPayload = {
+  full_name?: string
+  email?: string
+  username?: string
+  password?: string
+  role?: 'ADMIN' | 'OFFICER' | 'AUDITOR'
+  is_active?: boolean
+}
+
+export type AuthSession = {
+  id: number
+  created_at: string
+  expires_at: string
+  ip_address?: string | null
+  user_agent?: string | null
+  revoked: boolean
+}
 export type ParcelRecord = {
   id: number
   parcel_code: string

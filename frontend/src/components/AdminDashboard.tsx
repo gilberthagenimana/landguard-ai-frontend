@@ -3,10 +3,12 @@
  * Data comes only from the existing API (users, audit logs, transactions, dashboard stats).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, AlertTriangle, FileText, MapPin, Settings, ShieldAlert, UserCheck, Users } from 'lucide-react'
+import { Activity, AlertTriangle, FileText, MapPin, Settings, ShieldAlert, UserCheck, UserPlus, Users } from 'lucide-react'
 import { api, type AuditRecord, type CurrentUser, type DashboardStats, type TransactionRecord, type UserRecord } from '../lib/api'
 import RiskDonut from './RiskDonut'
 import AddParcelModal from './AddParcelModal'
+import AddUserModal from './AddUserModal'
+
 import {
   EmptyState, ErrorNote, LoadingRows, MonthlyChart, PageHeader, Panel, RiskBadge, StatCard,
   formatDateTime, humanize, monthlySeries,
@@ -30,6 +32,7 @@ export default function AdminDashboard({
   const [failed, setFailed] = useState<string[]>([])
   const [roleFilter, setRoleFilter] = useState('ALL')
   const [showAddParcel, setShowAddParcel] = useState(false)
+  const [showAddUser, setShowAddUser] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -56,10 +59,12 @@ export default function AdminDashboard({
         actions={
           <>
             <button type="button" className="btn-secondary btn-sm" onClick={() => setShowAddParcel(true)}><MapPin size={15} /> Add parcel</button>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setShowAddUser(true)}><UserPlus size={15} /> Add user</button>
             <button type="button" className="btn-primary btn-sm" onClick={() => onNavigate('User Management')}><Users size={15} /> Manage users</button>
           </>
         }
       />
+
 
       {failed.length > 0 && <ErrorNote message={`Could not load ${failed.join(', ')}. Check that the backend is running.`} onRetry={load} />}
 
@@ -144,6 +149,8 @@ export default function AdminDashboard({
       </footer>
 
       {showAddParcel && <AddParcelModal onClose={() => setShowAddParcel(false)} onCreated={load} />}
+      {showAddUser && <AddUserModal onClose={() => setShowAddUser(false)} onCreated={load} />}
     </div>
   )
 }
+

@@ -4,11 +4,11 @@ import {
   AlertTriangle, ArrowRight, Bell, Check, CheckCircle, ChevronDown,
   ClipboardCheck, Clock, Download, FileText, Flag, FolderOpen, LayoutDashboard,
   LogOut, MapPin, Menu, Plus, Search, Shield, ShieldCheck, Upload,
-  UserRound, Users, X, Eye, FileIcon, AlertCircle, Info, Filter, RotateCcw,
+  UserPlus, UserRound, Users, X, Eye, FileIcon, AlertCircle, Info, Filter, RotateCcw,
   ArrowLeftRight, BarChart3, ClipboardList, Settings,
 } from 'lucide-react'
 import {
-  api, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
+  api, type AuthSession, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
   type DashboardStats, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
   type RiskResponse, type TransactionRecord, type UserRecord,
   type VerificationResponse, type VerificationResult,
@@ -19,7 +19,9 @@ import OfficerDashboard from './components/OfficerDashboard'
 import AuditorDashboard from './components/AuditorDashboard'
 import EvidenceSection from './components/EvidenceSection'
 import ParcelMap from './components/ParcelMap'
+import AddUserModal from './components/AddUserModal'
 import './dashboard.css'
+
 
 type Risk = 'Low' | 'Medium' | 'High'
 type Page = 'Dashboard' | 'Search Parcel' | 'Transactions' | 'Evidence' | 'Verification' | 'Pending Reviews' | 'Profile'
@@ -162,7 +164,7 @@ export default function App() {
           {activeNav === 'Pending Reviews' && <PendingReviewsPage />}
           {activeNav === 'Audit Logs' && <AuditLogsPage />}
           {activeNav === 'Reports' && <ReportsPage />}
-          {activeNav === 'Profile' && <ProfilePage currentUser={currentUser} onLogout={logout} />}
+          {activeNav === 'Profile' && <ProfilePage currentUser={currentUser} onLogout={logout} onUpdateUser={setCurrentUser} />}
         </div>
       </main>
       {showProfileModal && <ProfileModal user={currentUser} onClose={() => setShowProfileModal(false)} onLogout={logout} />}
@@ -174,16 +176,33 @@ export default function App() {
    LOGIN SCREEN
    ========================================================================= */
 function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: CurrentUser) => void; onPublicCheck: () => void }) {
-  const [email, setEmail] = useState('officer@landguard.local')
-  const [password, setPassword] = useState('OfficerPass123!')
-  const [role, setRole] = useState('OFFICER')
+  const [email, setEmail] = useState('admin@landguard.local')
+  const [password, setPassword] = useState('AdminPass123!')
+  const [role, setRole] = useState('ADMIN')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const applyPreset = (presetRole: 'ADMIN' | 'OFFICER' | 'AUDITOR') => {
+    setError('')
+    if (presetRole === 'ADMIN') {
+      setEmail('admin@landguard.local')
+      setPassword('AdminPass123!')
+      setRole('ADMIN')
+    } else if (presetRole === 'OFFICER') {
+      setEmail('officer@landguard.local')
+      setPassword('OfficerPass123!')
+      setRole('OFFICER')
+    } else if (presetRole === 'AUDITOR') {
+      setEmail('auditor@landguard.local')
+      setPassword('AuditorPass123!')
+      setRole('AUDITOR')
+    }
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true)
     try {
-      const response = await api.login(email, password, role)
+      const response = await api.login(email.trim(), password, role)
       localStorage.setItem('landguard_access_token', response.access_token)
       const user = await api.me()
       onContinue(user)
@@ -192,10 +211,19 @@ function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: Current
 
   const enterDemo = async () => {
     try {
-      const loginResp = await api.login('officer@landguard.local', 'OfficerPass123!', 'OFFICER')
+      const loginResp = await api.login(email.trim(), password, role)
       localStorage.setItem('landguard_access_token', loginResp.access_token)
-      const user = await api.me(); onContinue(user)
-    } catch { onContinue({ id: 2, full_name: 'Marie Habyarimana', email: 'officer@landguard.local', is_active: true, roles: ['OFFICER'] }) }
+      const user = await api.me()
+      onContinue(user)
+    } catch {
+      if (role === 'ADMIN') {
+        onContinue({ id: 1, full_name: 'Gilbert Godson (Admin)', email: 'admin@landguard.local', is_active: true, roles: ['ADMIN'] })
+      } else if (role === 'AUDITOR') {
+        onContinue({ id: 3, full_name: 'Patrick Uwizeye (Auditor)', email: 'auditor@landguard.local', is_active: true, roles: ['AUDITOR'] })
+      } else {
+        onContinue({ id: 2, full_name: 'Marie Habyarimana (Officer)', email: 'officer@landguard.local', is_active: true, roles: ['OFFICER'] })
+      }
+    }
   }
 
   return (
@@ -211,22 +239,59 @@ function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: Current
         <section className="login-form-panel">
           <h1>Welcome Back</h1>
           <p className="login-subtitle">Sign in to your account</p>
+
+          <div style={{ marginBottom: '14px' }}>
+            <span style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Select Demo Role:
+            </span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                className={`btn-secondary btn-sm ${role === 'ADMIN' ? 'btn-primary' : ''}`}
+                style={{ flex: 1, padding: '6px 8px', fontSize: '12px' }}
+                onClick={() => applyPreset('ADMIN')}
+              >
+                Admin
+              </button>
+              <button
+                type="button"
+                className={`btn-secondary btn-sm ${role === 'OFFICER' ? 'btn-primary' : ''}`}
+                style={{ flex: 1, padding: '6px 8px', fontSize: '12px' }}
+                onClick={() => applyPreset('OFFICER')}
+              >
+                Officer
+              </button>
+              <button
+                type="button"
+                className={`btn-secondary btn-sm ${role === 'AUDITOR' ? 'btn-primary' : ''}`}
+                style={{ flex: 1, padding: '6px 8px', fontSize: '12px' }}
+                onClick={() => applyPreset('AUDITOR')}
+              >
+                Auditor
+              </button>
+            </div>
+          </div>
+
           <form onSubmit={submit} className="login-form">
             <label>Username or Email<input type="text" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
             <label>Password<div className="password-field"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /><ChevronDown size={15} /></div></label>
             <button type="button" className="forgot-password">Forgot password?</button>
             {error && <p className="login-error">{error}</p>}
-            <button className="login-button" type="submit" disabled={loading}>{loading ? 'Authenticating...' : 'Login'}</button>
+            <button className="login-button" type="submit" disabled={loading}>{loading ? 'Authenticating...' : `Sign in as ${role}`}</button>
             <label>Select your role (if required)<select value={role} onChange={(e) => setRole(e.target.value)}><option value="ADMIN">Admin</option><option value="AUDITOR">Auditor</option><option value="OFFICER">Officer</option></select></label>
           </form>
-          <button className="demo-button" onClick={enterDemo}>Launch Offline Demo Mode</button>
+          <button className="demo-button" onClick={enterDemo}>Launch Offline Demo Mode ({role})</button>
           <button onClick={onPublicCheck} className="login-note-btn">Public UPI Check (No Login Required)</button>
-          <p className="login-note">© 2025 LandGuard AI. All rights reserved.</p>
+          <p className="login-note">
+            Admin login: admin@landguard.local / AdminPass123!<br />
+            © 2025 LandGuard AI. All rights reserved.
+          </p>
         </section>
       </div>
     </div>
   )
 }
+
 
 /* =========================================================================
    SEARCH PARCEL PAGE
@@ -1023,71 +1088,405 @@ function UserManagementPage() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [showAddUser, setShowAddUser] = useState(false)
   const [showEditUser, setShowEditUser] = useState(false)
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null)
+  const [roleFilter, setRoleFilter] = useState('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const loadUsers = () => {
     setLoading(true)
-    api.users().then(setUsers).catch(() => setMessage('Unable to load users.')).finally(() => setLoading(false))
+    api.users()
+      .then(setUsers)
+      .catch((err) => setErrorMsg(err instanceof Error ? err.message : 'Unable to load users.'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(loadUsers, [])
 
   const disableUser = async (id: number) => {
     try {
+      setErrorMsg('')
       await api.disableUser(id)
       setMessage('User access revoked.')
       loadUsers()
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to update user.')
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to update user.')
     }
   }
 
-  const editUser = async (userId: number, payload: { full_name?: string; email?: string; password?: string; is_active?: boolean; role?: string }) => {
+  const reactivateUser = async (id: number) => {
     try {
+      setErrorMsg('')
+      await api.reactivateUser(id)
+      setMessage('User access restored.')
+      loadUsers()
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to reactivate user.')
+    }
+  }
+
+  const editUser = async (userId: number, payload: { full_name?: string; email?: string; username?: string; password?: string; is_active?: boolean; role?: 'ADMIN' | 'OFFICER' | 'AUDITOR' }) => {
+    try {
+      setErrorMsg('')
       await api.updateUser(userId, payload)
       setMessage('User updated successfully.')
       setShowEditUser(false)
       setEditingUser(null)
       loadUsers()
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to update user.')
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to update user.')
+      throw err
     }
   }
 
-  return <div>
-    <div className="page-heading"><div><h1>User Management</h1><p className="heading-subtitle">Manage authorized personnel and role access.</p></div><button className="btn-primary"><Plus size={15} /> Add User</button></div>
-    {message && <div className="alert alert--info">{message}</div>}
-    <div className="table-card"><table className="data-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead><tbody>
-      {loading ? <tr><td colSpan={6}>Loading users...</td></tr> : users.map((user) => <tr key={user.id}><td><strong>{user.full_name}</strong><br /><span className="text-muted">{user.username || 'No username'}</span></td><td>{user.email}</td><td>{user.roles[0]?.name || 'Unassigned'}</td><td><span className={user.is_active ? 'status-label risk-label--low' : 'status-label risk-label--high'}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td>Not available</td><td>{user.is_active && <button className="btn-secondary btn-sm" onClick={() => disableUser(user.id)}>Revoke</button>}</td><td><button className="btn-secondary btn-sm" onClick={() => { setEditingUser(user); setShowEditUser(true) }}>Edit</button></td></tr>)}
-    </tbody></table></div>
-    {showEditUser && editingUser && <EditUserModal user={editingUser} onClose={() => { setShowEditUser(false); setEditingUser(null) }} onSave={(payload) => editUser(editingUser.id, payload)} />}
-  </div>
+  const filteredUsers = users.filter((u) => {
+    const roleMatch = roleFilter === 'ALL' || (u.roles[0]?.name === roleFilter)
+    const q = searchQuery.trim().toLowerCase()
+    const searchMatch = !q ||
+      u.full_name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      (u.username && u.username.toLowerCase().includes(q))
+    return roleMatch && searchMatch
+  })
+
+  return (
+    <div>
+      <div className="page-heading">
+        <div>
+          <h1>User Management</h1>
+          <p className="heading-subtitle">Manage authorized personnel, role permissions, and system access.</p>
+        </div>
+        <button type="button" className="btn-primary" onClick={() => setShowAddUser(true)}>
+          <Plus size={15} /> Add User
+        </button>
+      </div>
+
+      {message && (
+        <div className="alert alert--success" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{message}</span>
+          <button type="button" className="icon-button" onClick={() => setMessage('')}><X size={14} /></button>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="alert alert--error" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{errorMsg}</span>
+          <button type="button" className="icon-button" onClick={() => setErrorMsg('')}><X size={14} /></button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+        <div style={{ flex: '1 1 240px' }}>
+          <input
+            className="form-input"
+            type="text"
+            placeholder="Search by name, email, or username..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="filter-tabs" style={{ margin: 0 }}>
+          {['ALL', 'OFFICER', 'AUDITOR', 'ADMIN'].map((r) => {
+            const count = r === 'ALL' ? users.length : users.filter((u) => u.roles[0]?.name === r).length
+            const label = r === 'ALL' ? 'All Roles' : r === 'OFFICER' ? 'Officers' : r === 'AUDITOR' ? 'Auditors' : 'Admins'
+            return (
+              <button
+                key={r}
+                type="button"
+                className={`filter-tab ${roleFilter === r ? 'filter-tab--active' : ''}`}
+                onClick={() => setRoleFilter(r)}
+              >
+                {label} ({count})
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name & Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>User ID</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>Loading users...</td></tr>
+            ) : filteredUsers.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>No users match your criteria.</td></tr>
+            ) : (
+              filteredUsers.map((user) => (
+                <tr key={user.id}>
+                  <td>
+                    <strong>{user.full_name}</strong>
+                    <br />
+                    <span className="text-muted" style={{ fontSize: '12px' }}>@{user.username || 'auto'}</span>
+                  </td>
+                  <td>{user.email}</td>
+                  <td>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      backgroundColor: user.roles[0]?.name === 'ADMIN' ? '#eff6ff' : user.roles[0]?.name === 'AUDITOR' ? '#f5f3ff' : '#ecfdf5',
+                      color: user.roles[0]?.name === 'ADMIN' ? '#1d4ed8' : user.roles[0]?.name === 'AUDITOR' ? '#6d28d9' : '#047857',
+                    }}>
+                      {user.roles[0]?.name || 'Unassigned'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={user.is_active ? 'status-label risk-label--low' : 'status-label risk-label--high'}>
+                      {user.is_active ? 'Active' : 'Revoked'}
+                    </span>
+                  </td>
+                  <td>#{user.id}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={() => { setEditingUser(user); setShowEditUser(true) }}
+                      >
+                        Edit
+                      </button>
+                      {user.is_active ? (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          style={{ color: '#dc2626' }}
+                          onClick={() => disableUser(user.id)}
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          style={{ color: '#059669' }}
+                          onClick={() => reactivateUser(user.id)}
+                        >
+                          Reactivate
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showAddUser && (
+        <AddUserModal
+          onClose={() => setShowAddUser(false)}
+          onCreated={() => {
+            setShowAddUser(false)
+            setMessage('User added successfully.')
+            loadUsers()
+          }}
+        />
+      )}
+
+      {showEditUser && editingUser && (
+        <EditUserModal
+          user={editingUser}
+          onClose={() => { setShowEditUser(false); setEditingUser(null) }}
+          onSave={(payload) => editUser(editingUser.id, payload)}
+        />
+      )}
+    </div>
+  )
 }
 
-function EditUserModal({ user, onClose, onSave }: { user: UserRecord; onClose: () => void; onSave: (payload: { full_name?: string; email?: string; password?: string; is_active?: boolean; role?: string }) => void }) {
+function EditUserModal({
+  user,
+  onClose,
+  onSave,
+}: {
+  user: UserRecord
+  onClose: () => void
+  onSave: (payload: {
+    full_name?: string
+    email?: string
+    username?: string
+    password?: string
+    is_active?: boolean
+    role?: 'ADMIN' | 'OFFICER' | 'AUDITOR'
+  }) => Promise<void>
+}) {
   const [fullName, setFullName] = useState(user.full_name)
   const [email, setEmail] = useState(user.email)
+  const [username, setUsername] = useState(user.username || '')
+  const [role, setRole] = useState<'OFFICER' | 'AUDITOR' | 'ADMIN'>(
+    (user.roles[0]?.name as 'ADMIN' | 'OFFICER' | 'AUDITOR') || 'OFFICER'
+  )
   const [password, setPassword] = useState('')
   const [isActive, setIsActive] = useState(user.is_active)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  const save = () => {
-    const payload: { full_name?: string; email?: string; password?: string; is_active?: boolean } = { full_name: fullName, email }
-    if (password) payload.password = password
-    payload.is_active = isActive
-    onSave(payload)
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!fullName.trim()) {
+      setError('Full name is required.')
+      return
+    }
+    if (!email.trim()) {
+      setError('Email is required.')
+      return
+    }
+    if (password && password.length < 8) {
+      setError('If resetting password, it must be at least 8 characters long.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload: {
+        full_name: string
+        email: string
+        username?: string
+        password?: string
+        is_active: boolean
+        role: 'ADMIN' | 'OFFICER' | 'AUDITOR'
+      } = {
+        full_name: fullName.trim(),
+        email: email.trim(),
+        username: username.trim() || undefined,
+        is_active: isActive,
+        role,
+      }
+      if (password) payload.password = password
+      await onSave(payload)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update user.')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  return <div className="modal-overlay" onClick={onClose}><div className="modal-window" onClick={(e) => e.stopPropagation()}><div className="modal-head"><div><h2>Edit User</h2><p>Update account details and access level.</p></div><button className="icon-button" onClick={onClose}>✕</button></div>
-    <div className="detail-grid">
-      <label>Full Name<input value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
-      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label>Password (leave blank to keep current)<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password if reset" /></label>
-      <label>Status<select value={String(isActive)} onChange={(e) => setIsActive(e.target.value === 'true')}><option value="true">Active</option><option value="false">Inactive</option></select></label>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-window"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-user-title"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '540px' }}
+      >
+        <div className="modal-head">
+          <div>
+            <h2 id="edit-user-title" style={{ margin: 0, fontSize: '18px' }}>Edit User #{user.id}</h2>
+            <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Update account details, role permissions, or password.</p>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        {error && <div className="alert alert--error" role="alert" style={{ marginBottom: '14px' }}>{error}</div>}
+
+        <form onSubmit={handleSave}>
+          <div className="form-group">
+            <label className="form-label" htmlFor="edit-name">Full Name</label>
+            <input
+              id="edit-name"
+              className="form-input"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="edit-email">Email</label>
+              <input
+                id="edit-email"
+                className="form-input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="edit-username">Username</label>
+              <input
+                id="edit-username"
+                className="form-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          <div className="form-row" style={{ marginTop: '14px' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="edit-role">Role</label>
+              <select
+                id="edit-role"
+                className="form-select"
+                value={role}
+                onChange={(e) => setRole(e.target.value as 'OFFICER' | 'AUDITOR' | 'ADMIN')}
+              >
+                <option value="OFFICER">Officer</option>
+                <option value="AUDITOR">Auditor</option>
+                <option value="ADMIN">Administrator</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="edit-status">Status</label>
+              <select
+                id="edit-status"
+                className="form-select"
+                value={String(isActive)}
+                onChange={(e) => setIsActive(e.target.value === 'true')}
+              >
+                <option value="true">Active</option>
+                <option value="false">Revoked / Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '14px' }}>
+            <label className="form-label" htmlFor="edit-password">
+              Reset Password <span style={{ color: '#94a3b8', fontSize: '12px' }}>(leave blank to keep current)</span>
+            </label>
+            <input
+              id="edit-password"
+              className="form-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter new password (min. 8 characters)"
+            />
+          </div>
+
+          <div className="modal-actions" style={{ marginTop: '20px' }}>
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Saving Changes…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-    <div className="modal-actions"><button className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={save}>Save Changes</button></div>
-  </div></div>
+  )
 }
+
 
 function SystemSettingsPage() {
   const [tab, setTab] = useState('General')
@@ -1154,23 +1553,83 @@ function ReportsPage() {
 /* =========================================================================
    PROFILE PAGE
    ========================================================================= */
-function ProfilePage({ currentUser, onLogout }: { currentUser: CurrentUser | null; onLogout: () => void }) {
+function ProfilePage({ currentUser, onLogout, onUpdateUser }: { currentUser: CurrentUser | null; onLogout: () => void; onUpdateUser?: (user: CurrentUser) => void }) {
   const [editing, setEditing] = useState(false)
+  const [fullNameDraft, setFullNameDraft] = useState(currentUser?.full_name ?? '')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
   const [emailNotifs, setEmailNotifs] = useState(true)
   const [smsNotifs, setSmsNotifs] = useState(true)
   const [systemAlerts, setSystemAlerts] = useState(true)
   const [frequency, setFrequency] = useState('Instant')
+  const [pwOpen, setPwOpen] = useState(false)
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [savingPw, setSavingPw] = useState(false)
+  const [pwMessage, setPwMessage] = useState('')
+  const [sessions, setSessions] = useState<AuthSession[] | null>(null)
+  const [loadingSessions, setLoadingSessions] = useState(false)
+  const [sessionsError, setSessionsError] = useState('')
+
+  const loadSessions = async () => {
+    setLoadingSessions(true)
+    setSessionsError('')
+    try { setSessions(await api.sessions()) } catch { setSessionsError('Could not load sessions.') }
+    finally { setLoadingSessions(false) }
+  }
+
+  const saveProfile = async () => {
+    setSavingProfile(true)
+    setProfileMessage('')
+    try {
+      const res = await api.updateMe({ full_name: fullNameDraft.trim() })
+      setProfileMessage(res.message)
+      setEditing(false)
+      if (onUpdateUser && currentUser) onUpdateUser({ ...currentUser, full_name: fullNameDraft.trim() })
+    } catch { setProfileMessage('Profile update failed. Please try again.') }
+    finally { setSavingProfile(false) }
+  }
+
+  const submitPassword = async (event: FormEvent) => {
+    event.preventDefault()
+    if (newPw !== confirmPw) { setPwMessage('New passwords do not match.'); return }
+    if (newPw.length < 8) { setPwMessage('New password must be at least 8 characters.'); return }
+    setSavingPw(true)
+    setPwMessage('')
+    try {
+      const res = await api.changePassword(currentPw, newPw)
+      setPwMessage(res.message)
+      setPwOpen(false)
+      setCurrentPw('')
+      setNewPw('')
+      setConfirmPw('')
+    } catch (error) { setPwMessage(error instanceof Error ? error.message : 'Password change failed.') }
+    finally { setSavingPw(false) }
+  }
+
+  const activeSessions = (sessions ?? []).filter((item) => !item.revoked)
 
   return (
     <div className="profile-page">
       <div className="page-heading profile-page-heading"><div><h1>My Profile</h1><p className="heading-subtitle">Manage your account information and preferences.</p></div></div>
       <section className="profile-identity-card">
-        <div className="profile-identity-main"><div className="profile-avatar-lg">{currentUser ? initials(currentUser.full_name) : 'OF'}</div><div><h2>{currentUser?.full_name ?? 'Officer User'} <span className="badge badge--success">Active</span></h2><span className="profile-role">{displayRole(currentUser?.roles[0] ?? 'OFFICER')}</span><p>Land Officer - Gasabo District</p></div></div>
+        <div className="profile-identity-main"><div className="profile-avatar-lg">{currentUser ? initials(currentUser.full_name) : 'OF'}</div><div><h2>{currentUser?.full_name ?? 'Officer User'} <span className="badge badge--success">Active</span></h2><span className="profile-role">{displayRole(currentUser?.roles[0] ?? 'OFFICER')}</span></div></div>
         <button className="btn-outline" onClick={() => setEditing(!editing)}>{editing ? 'Cancel' : 'Edit Profile'}</button>
-        <div className="profile-contact-row"><div><span>Email</span><strong>{currentUser?.email ?? 'officer@landguard.rw'}</strong></div><div><span>Phone</span><strong>+250 788 123 456</strong></div><div><span>Joined</span><strong>Apr 10, 2025</strong></div></div>
+        {editing ? (
+          <div className="card" style={{ padding: 16 }}>
+            <form onSubmit={saveProfile}>
+              <div className="form-group"><label className="form-label" htmlFor="profile-full-name">Full Name</label><input id="profile-full-name" className="form-input" value={fullNameDraft} onChange={(e) => setFullNameDraft(e.target.value)} /></div>
+              <div className="form-group"><label className="form-label" htmlFor="profile-email">Email</label><input id="profile-email" className="form-input" value={currentUser?.email ?? ''} disabled /></div>
+              {profileMessage && <div className={`alert ${profileMessage.toLowerCase().includes('fail') ? 'alert--error' : 'alert--success'}`}>{profileMessage}</div>}
+              <div className="profile-edit-actions"><button className="btn-primary" type="submit" disabled={savingProfile || !fullNameDraft.trim()}>Save Changes</button><button className="btn-secondary" type="button" onClick={() => { setEditing(false); setFullNameDraft(currentUser?.full_name ?? ''); setProfileMessage('') }}>Cancel</button></div>
+            </form>
+          </div>
+        ) : null}
+        <div className="profile-contact-row"><div><span>Email</span><strong>{currentUser?.email ?? '—'}</strong></div><div><span>Phone</span><strong>—</strong></div><div><span>Joined</span><strong>—</strong></div></div>
       </section>
       <section className="profile-preferences-card"><div className="profile-section-heading"><h3>Contact Preferences</h3></div><div className="profile-preferences-grid"><div className="profile-toggle-list"><div className="profile-toggle-row"><span>✉ Email Notifications</span><button aria-label="Toggle email notifications" className={`toggle ${emailNotifs ? 'toggle--on' : ''}`} onClick={() => setEmailNotifs(!emailNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>▣ SMS Notifications</span><button aria-label="Toggle SMS notifications" className={`toggle ${smsNotifs ? 'toggle--on' : ''}`} onClick={() => setSmsNotifs(!smsNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>♟ System Alerts</span><button aria-label="Toggle system alerts" className={`toggle ${systemAlerts ? 'toggle--on' : ''}`} onClick={() => setSystemAlerts(!systemAlerts)}><span className="toggle-dot" /></button></div></div><label className="frequency-control">Notification Frequency<select value={frequency} onChange={(e) => setFrequency(e.target.value)}><option>Instant</option><option>Daily digest</option><option>Weekly digest</option></select></label></div></section>
-      <div className="profile-security-grid"><section className="profile-security-card"><div className="security-icon">♙</div><div><h3>Change Password</h3><p>Update your password regularly to keep your account secure.</p><button className="btn-outline">Change Password</button></div></section><section className="profile-security-card"><div className="security-icon">♢</div><div><h3>Security & Sessions</h3><p>Last Login<br /><strong>Apr 23, 2025 09:12 AM</strong></p><p>Active Sessions<br /><strong>1 device</strong></p><button className="btn-outline">View Sessions</button></div></section></div>
+      <div className="profile-security-grid"><section className="profile-security-card"><div className="security-icon">♙</div><div><h3>Change Password</h3><p>Update your password regularly to keep your account secure.</p>{!pwOpen ? (<button className="btn-outline" onClick={() => { setPwOpen(true); setPwMessage(''); }}>Change Password</button>) : (<form onSubmit={submitPassword}><div className="form-group"><label className="form-label" htmlFor="current-password">Current Password</label><input id="current-password" className="form-input" type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} /></div><div className="form-group"><label className="form-label" htmlFor="new-password">New Password</label><input id="new-password" className="form-input" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} /></div><div className="form-group"><label className="form-label" htmlFor="confirm-password">Confirm New Password</label><input id="confirm-password" className="form-input" type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></div>{pwMessage && <div className={`alert ${pwMessage.toLowerCase().includes('fail') ? 'alert--error' : 'alert--success'}`}>{pwMessage}</div>}<div className="profile-edit-actions"><button className="btn-primary" type="submit" disabled={savingPw}>Update Password</button><button className="btn-secondary" type="button" onClick={() => { setPwOpen(false); setPwMessage(''); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}>Cancel</button></div></form>)}</div></section><section className="profile-security-card"><div className="security-icon">♢</div><div><h3>Security & Sessions</h3><p>Active Sessions<br /><strong>{loadingSessions ? 'Checking...' : String(activeSessions.length)}</strong></p>{loadingSessions && <p className="text-muted">Loading your active sessions...</p>}{sessionsError && <div className="alert alert--error">{sessionsError}</div>}{sessions === null && !loadingSessions && (<button className="btn-outline" onClick={loadSessions}>View Sessions</button>)}{sessions !== null && sessions.length > 0 && (<div className="session-list">{sessions.filter((item) => !item.revoked).map((item) => (<div className="session-item" key={item.id}><div><strong>{item.user_agent ?? 'Unknown device'}</strong><span className="text-muted">{item.ip_address ?? '—'}</span></div><div><span>Expires</span><strong>{new Date(item.expires_at).toLocaleString()}</strong></div></div>))}</div>)}</div></section></div>
     </div>
   )
 }
