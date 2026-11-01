@@ -10,8 +10,8 @@ import {
 
 import {
   api, type AuthSession, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
-  type DashboardStats, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
-  type RiskResponse, type TransactionRecord, type UserRecord,
+  type DashboardStats, type DatabaseHealth, type FileStoragePolicy, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
+  type RiskResponse, type Setting, type TransactionRecord, type UserRecord,
   type VerificationResponse, type VerificationResult,
 } from './lib/api'
 import PublicUpiCheck from './components/PublicUpiCheck'
@@ -1702,17 +1702,182 @@ function EditUserModal({
 
 function SystemSettingsPage() {
   const [tab, setTab] = useState('General')
-  const [saved, setSaved] = useState(false)
   const tabs = ['General', 'Security', 'Notifications', 'Database', 'File Storage']
+  const [settings, setSettings] = useState<Setting[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [fileStorage, setFileStorage] = useState<FileStoragePolicy | null>(null)
+  const [dbHealth, setDbHealth] = useState<DatabaseHealth | null>(null)
+  const [dbChecking, setDbChecking] = useState(false)
+
+  const [systemName, setSystemName] = useState('LandGuard AI')
+  const [organization, setOrganization] = useState('Rwanda Land Administration')
+  const [reviewThreshold, setReviewThreshold] = useState('medium')
+  const [allowedFileTypes, setAllowedFileTypes] = useState('pdf,jpg,jpeg,png')
+  const [jwtExpiryMinutes, setJwtExpiryMinutes] = useState('60')
+  const [minPasswordLength, setMinPasswordLength] = useState('8')
+  const [maxFailedLogins, setMaxFailedLogins] = useState('5')
+  const [lockoutMinutes, setLockoutMinutes] = useState('30')
+  const [emailHighRisk, setEmailHighRisk] = useState('false')
+  const [emailAwaitingReview, setEmailAwaitingReview] = useState('false')
+  const [emailAccountEvents, setEmailAccountEvents] = useState('false')
+  const [inAppSystemAlerts, setInAppSystemAlerts] = useState('true')
+  const [notificationFrequency, setNotificationFrequency] = useState('instant')
+  const [maxFileSizeMb, setMaxFileSizeMb] = useState('10')
+
+  const loadSettings = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await api.getSettings()
+      setSettings(data)
+      const map: Record<string, string> = {}
+      data.forEach((item) => { map[item.key] = item.value })
+      setSystemName(map['general.system_name'] ?? 'LandGuard AI')
+      setOrganization(map['general.organization'] ?? 'Rwanda Land Administration')
+      setReviewThreshold(map['general.review_threshold'] ?? 'medium')
+      setAllowedFileTypes(map['general.allowed_file_types'] ?? 'pdf,jpg,jpeg,png')
+      setJwtExpiryMinutes(map['security.jwt_expiry_minutes'] ?? '60')
+      setMinPasswordLength(map['security.min_password_length'] ?? '8')
+      setMaxFailedLogins(map['security.max_failed_logins'] ?? '5')
+      setLockoutMinutes(map['security.lockout_minutes'] ?? '30')
+      setEmailHighRisk(map['notifications.email_high_risk'] ?? 'false')
+      setEmailAwaitingReview(map['notifications.email_awaiting_review'] ?? 'false')
+      setEmailAccountEvents(map['notifications.email_account_events'] ?? 'false')
+      setInAppSystemAlerts(map['notifications.in_app_system_alerts'] ?? 'true')
+      setNotificationFrequency(map['notifications.frequency'] ?? 'instant')
+      setMaxFileSizeMb(map['file_storage.max_file_size_mb'] ?? '10')
+    } catch { setError('Unable to load system settings.') }
+    finally { setLoading(false) }
+  }
+
+  const loadFileStorage = async () => {
+    try { setFileStorage(await api.getFileStorage()) } catch { setFileStorage(null) }
+  }
+
+  const loadDatabaseHealth = async () => {
+    setDbChecking(true)
+    try { setDbHealth(await api.getDatabaseHealth()) } catch { setDbHealth(null) }
+    finally { setDbChecking(false) }
+  }
+
+  useEffect(() => { loadSettings() }, [])
+  useEffect(() => { loadFileStorage() }, [])
+  useEffect(() => { loadDatabaseHealth() }, [])
+
+  const saveGeneral = async () => {
+    setSaving(true)
+    setMessage('')
+    setError('')
+    const updates: Array<[string, string]> = [
+      ['general.system_name', systemName],
+      ['general.organization', organization],
+      ['general.review_threshold', reviewThreshold],
+      ['general.allowed_file_types', allowedFileTypes],
+    ]
+    try {
+      await Promise.all(updates.map(([key, value]) => api.updateSetting(key, value)))
+      setMessage('General settings saved successfully.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save general settings.') }
+    finally { setSaving(false) }
+  }
+
+  const saveSecurity = async () => {
+    setSaving(true)
+    setMessage('')
+    setError('')
+    const updates: Array<[string, string]> = [
+      ['security.jwt_expiry_minutes', jwtExpiryMinutes],
+      ['security.min_password_length', minPasswordLength],
+      ['security.max_failed_logins', maxFailedLogins],
+      ['security.lockout_minutes', lockoutMinutes],
+    ]
+    try {
+      await Promise.all(updates.map(([key, value]) => api.updateSetting(key, value)))
+      setMessage('Security settings saved successfully.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save security settings.') }
+    finally { setSaving(false) }
+  }
+
+  const saveNotifications = async () => {
+    setSaving(true)
+    setMessage('')
+    setError('')
+    const updates: Array<[string, string]> = [
+      ['notifications.email_high_risk', emailHighRisk],
+      ['notifications.email_awaiting_review', emailAwaitingReview],
+      ['notifications.email_account_events', emailAccountEvents],
+      ['notifications.in_app_system_alerts', inAppSystemAlerts],
+      ['notifications.frequency', notificationFrequency],
+    ]
+    try {
+      await Promise.all(updates.map(([key, value]) => api.updateSetting(key, value)))
+      setMessage('Notification preferences saved successfully.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save notification preferences.') }
+    finally { setSaving(false) }
+  }
+
+  const saveFileStorage = async () => {
+    setSaving(true)
+    setMessage('')
+    setError('')
+    try {
+      await api.updateSetting('file_storage.max_file_size_mb', maxFileSizeMb)
+      setMessage('File storage settings saved successfully.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save file storage settings.') }
+    finally { setSaving(false) }
+  }
+
   return <div>
-    <div className="page-heading"><div><h1>System Settings</h1><p className="heading-subtitle">Configure institutional verification and storage preferences.</p></div><button className="btn-primary" onClick={() => setSaved(true)}><Check size={15} /> Save Settings</button></div>
-    {saved && <div className="alert alert--success">Settings saved for this session.</div>}
-    <div className="filter-tabs">{tabs.map((item) => <button key={item} className={`filter-tab ${tab === item ? 'filter-tab--active' : ''}`} onClick={() => { setTab(item); setSaved(false) }}>{item}</button>)}</div>
+    <div className="page-heading"><div><h1>System Settings</h1><p className="heading-subtitle">Configure institutional verification and storage preferences.</p></div><button className="btn-primary" onClick={saveGeneral} disabled={saving}>{saving ? 'Saving...' : 'Save Settings'}</button></div>
+    {message && <div className="alert alert--success">{message}</div>}
+    {error && <div className="alert alert--error">{error}</div>}
+    <div className="filter-tabs">{tabs.map((item) => <button key={item} className={`filter-tab ${tab === item ? 'filter-tab--active' : ''}`} onClick={() => { setTab(item); setMessage(''); setError('') }}>{item}</button>)}</div>
     <div className="card"><div className="card-header"><h3>{tab} Configuration</h3></div><div className="settings-form">
-      <label>System Name<input className="filter-input" defaultValue="LandGuard AI" /></label>
-      <label>Organization<input className="filter-input" defaultValue="Rwanda Land Administration" /></label>
-      <label>Default Review Threshold<select className="filter-select" defaultValue="medium"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
-      <label>Allowed File Types<input className="filter-input" defaultValue="PDF, JPG, PNG" /></label>
+      {loading ? <p className="text-muted">Loading settings...</p> : (
+      <>
+      {tab === 'General' && (<>
+        <label>System Name<input className="filter-input" value={systemName} onChange={(e) => setSystemName(e.target.value)} /></label>
+        <label>Organization<input className="filter-input" value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
+        <label>Default Review Threshold<select className="filter-select" value={reviewThreshold} onChange={(e) => setReviewThreshold(e.target.value)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label>Allowed File Types<input className="filter-input" value={allowedFileTypes} onChange={(e) => setAllowedFileTypes(e.target.value)} /></label>
+        <button className="btn-primary" onClick={saveGeneral} disabled={saving}>Save Changes</button>
+      </>)}
+      {tab === 'Security' && (<>
+        <label>Session Expiry (minutes)<input className="filter-input" type="number" min={5} max={1440} value={jwtExpiryMinutes} onChange={(e) => setJwtExpiryMinutes(e.target.value)} /></label>
+        <label>Minimum Password Length<input className="filter-input" type="number" min={8} max={64} value={minPasswordLength} onChange={(e) => setMinPasswordLength(e.target.value)} /></label>
+        <label>Max Failed Logins<input className="filter-input" type="number" min={1} max={20} value={maxFailedLogins} onChange={(e) => setMaxFailedLogins(e.target.value)} /></label>
+        <label>Account Lockout (minutes)<input className="filter-input" type="number" min={1} max={1440} value={lockoutMinutes} onChange={(e) => setLockoutMinutes(e.target.value)} /></label>
+        <button className="btn-primary" onClick={saveSecurity} disabled={saving}>Save Changes</button>
+        <p className="text-muted">Multi-factor authentication is not currently supported.</p>
+      </>)}
+      {tab === 'Notifications' && (<>
+        <label>Email: High Risk Transactions<input type="checkbox" checked={emailHighRisk === 'true'} onChange={(e) => setEmailHighRisk(e.target.checked ? 'true' : 'false')} /></label>
+        <label>Email: Transactions Awaiting Review<input type="checkbox" checked={emailAwaitingReview === 'true'} onChange={(e) => setEmailAwaitingReview(e.target.checked ? 'true' : 'false')} /></label>
+        <label>Email: Account Events<input type="checkbox" checked={emailAccountEvents === 'true'} onChange={(e) => setEmailAccountEvents(e.target.checked ? 'true' : 'false')} /></label>
+        <label>In-App System Alerts<input type="checkbox" checked={inAppSystemAlerts === 'true'} onChange={(e) => setInAppSystemAlerts(e.target.checked ? 'true' : 'false')} /></label>
+        <label>Notification Frequency<select className="filter-select" value={notificationFrequency} onChange={(e) => setNotificationFrequency(e.target.value)}><option value="instant">Instant</option><option value="daily">Daily digest</option><option value="weekly">Weekly digest</option></select></label>
+        <button className="btn-primary" onClick={saveNotifications} disabled={saving}>Save Changes</button>
+        <p className="text-muted">Email delivery requires a configured provider; in-app notifications are recorded.</p>
+      </>)}
+      {tab === 'Database' && (<>
+        <div className="detail-grid"><div className="detail-card"><span>Database Status</span><strong>{dbChecking ? 'Checking...' : dbHealth?.status ?? 'Unknown'}</strong></div><div className="detail-card"><span>Service</span><strong>{dbHealth?.service ?? 'landguard-ai'}</strong></div><div className="detail-card"><span>Database</span><strong>{dbHealth?.database ?? 'neon-postgresql'}</strong></div></div>
+        <button className="btn-secondary" onClick={loadDatabaseHealth} disabled={dbChecking}>Re-check Database</button>
+        <p className="text-muted">Health checks never expose connection strings or credentials and never modify data.</p>
+      </>)}
+      {tab === 'File Storage' && (<>
+        {fileStorage ? (<>
+          <div className="detail-grid"><div className="detail-card"><span>Storage Provider</span><strong>{fileStorage.storage_provider}</strong></div><div className="detail-card"><span>Max File Size (MB)</span><strong>{fileStorage.max_file_size_mb}</strong></div></div>
+          <p>Allowed file types: {fileStorage.allowed_file_types.join(', ')}</p>
+          <label>Max File Size (MB)<input className="filter-input" type="number" min={1} max={500} value={maxFileSizeMb} onChange={(e) => setMaxFileSizeMb(e.target.value)} /></label>
+          <button className="btn-primary" onClick={saveFileStorage} disabled={saving}>Save Changes</button>
+        </>) : (<p className="text-muted">Unable to load file storage policy.</p>)}
+        <p className="text-muted">Uploads validate type and size server-side; files are stored privately with hashed UUIDs.</p>
+      </>)}
+      </>
+      )}
     </div></div>
   </div>
 }

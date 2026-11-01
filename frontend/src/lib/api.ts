@@ -40,6 +40,10 @@ export const api = {
   updateMe: (payload: { full_name?: string; password?: string }) => request<{ message: string }>('/api/auth/me', { method: 'PUT', body: JSON.stringify(payload) }),
   changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
   sessions: () => request<AuthSession[]>('/api/auth/sessions'),
+  getSettings: () => request<Setting[]>('/api/settings'),
+  updateSetting: (key: string, value: string) => request<Setting>(`/api/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  getFileStorage: () => request<FileStoragePolicy>('/api/settings/file-storage'),
+  getDatabaseHealth: () => request<DatabaseHealth>('/api/settings/database/health'),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   stats: () => request<DashboardStats>('/api/dashboard/stats'),
   users: () => request<UserRecord[]>('/api/users'),
@@ -148,6 +152,9 @@ export type AuthSession = {
   user_agent?: string | null
   revoked: boolean
 }
+export type Setting = { id: number; key: string; value: string; description?: string | null; updated_by?: number | null; updated_at?: string | null }
+export type FileStoragePolicy = { allowed_file_types: string[]; max_file_size_mb: number; storage_provider: string }
+export type DatabaseHealth = { status: string; service: string; database: string }
 export type ParcelRecord = {
   id: number
   parcel_code: string
