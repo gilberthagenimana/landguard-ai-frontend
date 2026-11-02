@@ -15,8 +15,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (response.status === 204) return undefined as T
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('landguard_access_token')
+      localStorage.removeItem('landguard_demo_session')
+      window.dispatchEvent(new Event('landguard-auth-expired'))
+    }
     let detail = 'Request failed'
-    if (typeof data.detail === 'string') {
+    if (response.status === 401) {
+      detail = 'Your session has expired. Please sign in again.'
+    } else if (typeof data.detail === 'string') {
       detail = data.detail
     } else if (Array.isArray(data.detail)) {
       detail = data.detail
@@ -55,9 +62,6 @@ export const api = {
 
   createParcel: (payload: ParcelCreatePayload) => request<ParcelRecord>('/api/parcels', { method: 'POST', body: JSON.stringify(payload) }),
   parcelByUpi: (upi: string) => request<ParcelRecord>(`/api/parcels/upi/${encodeURIComponent(upi)}`),
-  submitParcelLocation: (parcelId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/${parcelId}/location-submissions`, { method: 'POST', body: JSON.stringify(payload) }),
-  parcelLocationSubmissions: (parcelId: number) => request<ParcelLocationSubmission[]>(`/api/parcels/${parcelId}/location-submissions`),
-  reviewParcelLocation: (submissionId: number, payload: object) => request<ParcelLocationSubmission>(`/api/parcels/location-submissions/${submissionId}/review`, { method: 'PUT', body: JSON.stringify(payload) }),
   parcel: (id: number) => request<ParcelRecord>(`/api/parcels/${id}`),
   ownership: (id: number) => request<OwnershipRecord[]>(`/api/parcels/${id}/ownership-history`),
   parcelTransactions: (id: number) => request<TransactionRecord[]>(`/api/parcels/${id}/transactions`),
@@ -178,26 +182,13 @@ export type ParcelRecord = {
   location_verification_status?: string
   location_verification_metadata?: Record<string, unknown> | null
 }
-export type ParcelLocationSubmission = {
-  id: number
-  parcel_id: number
-  latitude: number | null
-  longitude: number | null
-  boundary_geometry?: unknown
-  source: string
-  metadata?: Record<string, unknown> | null
-  status: string
-  submitted_by: number
-  submitted_at: string
-  reviewed_by?: number | null
-  reviewed_at?: string | null
-  review_notes?: string | null
-}
 export type OwnerRecord = {
   id: number
   owner_code: string
   full_name: string
   identification_number?: string | null
+  phone?: string | null
+  email?: string | null
   status: string
   parcels_owned: number
 }

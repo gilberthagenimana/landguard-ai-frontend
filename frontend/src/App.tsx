@@ -66,10 +66,20 @@ export default function App() {
       setCurrentUser(user)
       const dashboardStats = await api.stats()
       setStats(dashboardStats)
-    } catch { /* demo mode */ }
+    } catch { /* The child pages display the specific API error. */ }
   }
 
   useEffect(() => { if (authenticated) loadCurrentUserAndStats() }, [authenticated])
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setAuthenticated(false)
+      setCurrentUser(null)
+      setStats(null)
+    }
+    window.addEventListener('landguard-auth-expired', handleAuthExpired)
+    return () => window.removeEventListener('landguard-auth-expired', handleAuthExpired)
+  }, [])
 
   const logout = () => {
     api.logout().catch(() => {})
@@ -306,9 +316,6 @@ function SearchParcelPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searched, setSearched] = useState(false)
-  const [source, setSource] = useState('')
-  const [coordinates, setCoordinates] = useState({ latitude: '', longitude: '' })
-  const [submissionMessage, setSubmissionMessage] = useState('')
 
   const search = async (e: FormEvent) => {
     e.preventDefault()
@@ -327,16 +334,6 @@ function SearchParcelPage() {
   }
 
   const clearSearch = () => { setUpi(''); setParcel(null); setHistory([]); setTransactionHistory([]); setError(''); setSearched(false) }
-
-  const submitLocation = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!parcel || !source.trim() || !coordinates.latitude || !coordinates.longitude) { setSubmissionMessage('Provide the authorized source and both coordinates.'); return }
-    try {
-      const result = await api.submitParcelLocation(parcel.id, { latitude: Number(coordinates.latitude), longitude: Number(coordinates.longitude), source: source.trim() })
-      setSubmissionMessage(`Location submitted with status: ${result.status.replace(/_/g, ' ').toLowerCase()}.`)
-      setSource(''); setCoordinates({ latitude: '', longitude: '' })
-    } catch (err) { setSubmissionMessage(err instanceof Error ? err.message : 'Location submission failed.') }
-  }
 
   return (
     <div className="workspace-page search-parcel-page">
@@ -357,11 +354,10 @@ function SearchParcelPage() {
               <div className="info-list">
                 <div className="info-row"><span className="info-label">UPI</span><span className="info-value"><strong>{parcel.upi}</strong></span></div><div className="info-row"><span className="info-label">Parcel Code</span><span className="info-value">{parcel.parcel_code}</span></div><div className="info-row"><span className="info-label">Province</span><span className="info-value">{parcel.province || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">District</span><span className="info-value">{parcel.district || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Sector / Cell</span><span className="info-value">{[parcel.sector, parcel.cell].filter(Boolean).join(' / ') || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Area</span><span className="info-value">{typeof parcel.area_ha === 'number' ? `${parcel.area_ha} ha` : 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Owner</span><span className="info-value">{parcel.current_owner_name || 'Unavailable'}</span></div>
               </div>
-              <div><ParcelMap location={{ verificationStatus: parcel.location_verification_status, latitude: parcel.latitude, longitude: parcel.longitude, geometry: parcel.boundary_geometry }} /></div>
+              <div><ParcelMap location={{ verificationStatus: parcel.location_verification_status, latitude: parcel.latitude, longitude: parcel.longitude, geometry: parcel.boundary_geometry, upi: parcel.upi, parcelCode: parcel.parcel_code, address: [parcel.cell, parcel.sector, parcel.district, parcel.province, 'Rwanda'].filter(Boolean).join(', '), district: parcel.district, sector: parcel.sector, cell: parcel.cell }} /></div>
             </div>
             <button type="button" className="btn-secondary history-action" onClick={() => document.getElementById('parcel-history')?.scrollIntoView({ behavior: 'smooth' })}>View Transaction History</button>
           </div>
-          <div className="card parcel-location-submission-card"><div className="card-header"><h3><MapPin size={18} /> Submit Authorized Location</h3><span className="badge">Officer workflow</span></div><p className="text-muted">Submit coordinates obtained from an authorized source. An Administrator must verify them before they appear as verified map data.</p><form onSubmit={submitLocation} className="location-submission-form"><label>Source<input className="form-input" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Authorized cadastral source" /></label><label>Latitude<input className="form-input" type="number" min="-90" max="90" step="any" value={coordinates.latitude} onChange={(e) => setCoordinates({ ...coordinates, latitude: e.target.value })} /></label><label>Longitude<input className="form-input" type="number" min="-180" max="180" step="any" value={coordinates.longitude} onChange={(e) => setCoordinates({ ...coordinates, longitude: e.target.value })} /></label><button className="btn-primary" type="submit">Submit for verification</button></form>{submissionMessage && <div className="alert alert--info">{submissionMessage}</div>}</div>
           <div className="card">
             <div className="card-header"><h3><UserRound size={18} /> Recorded Owner</h3></div>
             {parcel.current_owner_name ? (
@@ -389,8 +385,8 @@ function SearchParcelPage() {
 /* =========================================================================
    NEW TRANSACTION MODAL
    ========================================================================= */
-type ParcelSelection = { id: number; upi: string; parcel_code: string; owner_id: number; owner_name: string; location: string }
-type OwnerSelection = { id: number; name: string; code: string }
+type ParcelSelection = { id: number; upi: string; parcel_code: string; owner_id?: number | null; owner_name?: string | null; location: string; status: string }
+type OwnerSelection = { id: number; name: string; code: string; identification_number?: string | null }
 
 function NewTransactionModal({
   onClose,
@@ -400,65 +396,42 @@ function NewTransactionModal({
   onCreated: (tx: TransactionRecord) => void
 }) {
   const [parcels, setParcels] = useState<ParcelSelection[]>([])
+  const [selectedParcel, setSelectedParcel] = useState<ParcelSelection | null>(null)
   const [owners, setOwners] = useState<OwnerSelection[]>([])
-  const [selectedParcelId, setSelectedParcelId] = useState<number>(1)
-  const [sellerId, setSellerId] = useState<number>(1)
-  const [buyerId, setBuyerId] = useState<number>(7)
+  const [buyerId, setBuyerId] = useState<number | null>(null)
+  const [buyerMode, setBuyerMode] = useState<'existing' | 'new'>('existing')
+  const [ownerSearch, setOwnerSearch] = useState('')
+  const [newBuyer, setNewBuyer] = useState({ full_name: '', identification_number: '', phone: '', email: '' })
   const [txType, setTxType] = useState('SALE')
   const [declaredValue, setDeclaredValue] = useState('20000000')
   const [notes, setNotes] = useState('')
+  const [supportingFile, setSupportingFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.parcels()
-      .then((res) => {
-        if (res && res.length > 0) {
-          setParcels(res.map(p => ({
-            id: p.id,
-            upi: p.parcel_code || `UPI-${p.id}`,
-            parcel_code: p.parcel_code || `RW-${p.id}`,
-            owner_id: p.current_owner_id ?? 1,
-            owner_name: p.current_owner_name ?? 'Current Owner',
-            location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location,
-          })))
-        }
-      })
-      .catch(() => {})
-
-    api.owners()
-      .then((res) => {
-        if (res && res.length > 0) {
-          setOwners(res.map(o => ({
-            id: o.id,
-            name: o.full_name,
-            code: o.owner_code,
-          })))
-        }
-      })
-      .catch(() => {})
+    api.parcels().then((res) => setParcels(res.map(p => ({
+      id: p.id, upi: p.upi || p.parcel_code || `UPI-${p.id}`, parcel_code: p.parcel_code || `RW-${p.id}`,
+      owner_id: p.current_owner_id, owner_name: p.current_owner_name,
+      location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location, status: p.status,
+    })))).catch((err) => setError(err instanceof Error ? err.message : 'Unable to load parcels.'))
   }, [])
 
+  useEffect(() => {
+    api.owners(ownerSearch).then((res) => setOwners(res.map(o => ({
+      id: o.id, name: o.full_name, code: o.owner_code, identification_number: o.identification_number,
+    })))).catch((err) => setError(err instanceof Error ? err.message : 'Unable to search owners.'))
+  }, [ownerSearch])
+
   const handleParcelSelect = (idNum: number) => {
-    setSelectedParcelId(idNum)
-    const matched = parcels.find(p => p.id === idNum)
-    if (matched && matched.owner_id) {
-      setSellerId(matched.owner_id)
-      if (buyerId === matched.owner_id) {
-        const nextBuyer = owners.find(o => o.id !== matched.owner_id)
-        if (nextBuyer) setBuyerId(nextBuyer.id)
-      }
-    }
+    const matched = parcels.find(p => p.id === idNum) || null
+    setSelectedParcel(matched)
+    setBuyerId(null)
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-
-    if (sellerId === buyerId) {
-      setError('Seller and buyer cannot be the same party.')
-      return
-    }
 
     const cleanVal = Number(declaredValue.toString().replace(/[^0-9]/g, ''))
     if (!cleanVal || cleanVal <= 0) {
@@ -466,19 +439,38 @@ function NewTransactionModal({
       return
     }
 
-    setSubmitting(true)
-
-    const payload = {
-      parcel_id: selectedParcelId,
-      seller_owner_id: sellerId,
-      buyer_owner_id: buyerId,
-      transaction_type: txType,
-      transaction_date: new Date().toISOString(),
-      declared_value: cleanVal,
+    if (!selectedParcel || !buyerId && buyerMode === 'existing') {
+      setError('Select a parcel and an existing buyer.')
+      return
     }
-
+    if (buyerMode === 'new' && (!newBuyer.full_name.trim() || !newBuyer.identification_number.trim())) {
+      setError('New buyer name and identification number are required.')
+      return
+    }
+    setSubmitting(true)
     try {
+      let actualBuyerId = buyerId
+      if (buyerMode === 'new') {
+        const owner = await api.createOwner({
+          owner_code: `OWN-${Date.now()}`,
+          ...newBuyer,
+          status: 'ACTIVE',
+        })
+        actualBuyerId = owner.id
+      }
+      if (!actualBuyerId || !selectedParcel) throw new Error('A buyer and parcel are required.')
+      const payload = {
+        parcel_id: selectedParcel.id,
+        buyer_owner_id: actualBuyerId,
+        transaction_type: txType,
+        transaction_date: new Date().toISOString(),
+        declared_value: cleanVal,
+        supporting_reference: notes.trim() || null,
+      }
       const result = await api.createTransaction(payload)
+      if (supportingFile) {
+        await api.uploadEvidence(result.id, supportingFile, 'SUPPORTING_DOCUMENT', { notes: notes.trim() || undefined })
+      }
       onCreated(result)
       onClose()
     } catch (err) {
@@ -506,47 +498,52 @@ function NewTransactionModal({
             <label className="form-label">Target Parcel (UPI / Location)</label>
             <select
               className="form-select"
-              value={selectedParcelId}
+              value={selectedParcel?.id || ''}
               onChange={(e) => handleParcelSelect(Number(e.target.value))}
+              required
             >
+              <option value="">Select a parcel</option>
               {parcels.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.parcel_code} — {p.location} (Owner: {p.owner_name})
+                  {p.upi} — {p.location}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Seller (Recorded Owner)</label>
-              <select
-                className="form-select"
-                value={sellerId}
-                onChange={(e) => setSellerId(Number(e.target.value))}
-              >
-                {owners.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name} ({o.code})
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Seller (Recorded Owner)</label>
+            <input className="form-input" readOnly value={selectedParcel?.owner_name || 'Loaded and validated by server'} />
+            <small className="text-muted">The seller is derived from the parcel ownership record and cannot be changed.</small>
+          </div>
 
-            <div className="form-group">
-              <label className="form-label">Buyer (Acquiring Party)</label>
+          <div className="form-group">
+            <label className="form-label">Buyer</label>
+            <div className="form-row">
+              <button type="button" className={buyerMode === 'existing' ? 'btn-primary' : 'btn-secondary'} onClick={() => setBuyerMode('existing')}>Select Existing</button>
+              <button type="button" className={buyerMode === 'new' ? 'btn-primary' : 'btn-secondary'} onClick={() => setBuyerMode('new')}>Register New</button>
+            </div>
+            {buyerMode === 'existing' ? <>
+              <input className="form-input" value={ownerSearch} onChange={(e) => setOwnerSearch(e.target.value)} placeholder="Search by name or identification number" />
               <select
                 className="form-select"
-                value={buyerId}
+                value={buyerId || ''}
                 onChange={(e) => setBuyerId(Number(e.target.value))}
+                required
               >
+                <option value="">Select buyer</option>
                 {owners.map((o) => (
-                  <option key={o.id} value={o.id} disabled={o.id === sellerId}>
-                    {o.name} ({o.code}){o.id === sellerId ? ' (Seller)' : ''}
+                  <option key={o.id} value={o.id} disabled={o.id === selectedParcel?.owner_id}>
+                    {o.name} ({o.identification_number || o.code}){o.id === selectedParcel?.owner_id ? ' (Seller)' : ''}
                   </option>
                 ))}
               </select>
-            </div>
+            </> : <div className="form-row">
+              <input className="form-input" placeholder="Full name" value={newBuyer.full_name} onChange={(e) => setNewBuyer({ ...newBuyer, full_name: e.target.value })} required />
+              <input className="form-input" placeholder="Identification number" value={newBuyer.identification_number} onChange={(e) => setNewBuyer({ ...newBuyer, identification_number: e.target.value })} required />
+              <input className="form-input" placeholder="Phone (optional)" value={newBuyer.phone} onChange={(e) => setNewBuyer({ ...newBuyer, phone: e.target.value })} />
+              <input className="form-input" placeholder="Email (optional)" value={newBuyer.email} onChange={(e) => setNewBuyer({ ...newBuyer, email: e.target.value })} />
+            </div>}
           </div>
 
           <div className="form-row">
@@ -586,6 +583,10 @@ function NewTransactionModal({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. NOTARY-KG-2026-442"
             />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Supporting Document (Optional)</label>
+            <input type="file" className="form-input" onChange={(e) => setSupportingFile(e.target.files?.[0] || null)} />
           </div>
 
           <div className="modal-actions" style={{ marginTop: '20px' }}>

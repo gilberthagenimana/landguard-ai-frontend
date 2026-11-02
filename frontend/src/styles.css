@@ -476,7 +476,7 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .parcel-information-card .info-value { text-align: right; }
 .parcel-information-card .history-action { margin-top: 14px; }
 .parcel-map-shell { overflow: hidden; border: 1px solid #cfe3ef; border-radius: 7px; background: #eaf6ff; }
-.parcel-leaflet-map { width: 100%; min-height: 270px; }
+.parcel-leaflet-map { width: 100%; min-height: 350px; height: 350px; }
 .parcel-map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; color: #52758b; background: #fff; border-top: 1px solid #cfe3ef; font-size: 10px; }
 .parcel-map-toolbar > span { display: flex; align-items: center; gap: 5px; }
 .map-legend-dot { display: inline-block; width: 8px; height: 8px; background: #087fe0; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #087fe0; }
@@ -486,6 +486,12 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .parcel-map-empty strong { color: #245575; font-size: 12px; }
 .parcel-map-empty span { max-width: 280px; margin-top: 6px; font-size: 10px; line-height: 1.5; }
 .parcel-map-empty small { max-width: 280px; margin-top: 9px; color: #819aaa; font-size: 9px; line-height: 1.4; }
+.parcel-map-status { position: absolute; z-index: 400; top: 50%; left: 50%; display: flex; flex-direction: column; align-items: center; max-width: 280px; padding: 14px; color: #52758b; text-align: center; background: rgba(247, 252, 255, .92); border: 1px solid #9dcce8; border-radius: 7px; transform: translate(-50%, -50%); pointer-events: none; }
+.parcel-map-status strong { color: #245575; font-size: 12px; }
+.parcel-map-status span, .parcel-map-status small { margin-top: 6px; font-size: 10px; line-height: 1.4; }
+.parcel-map-status small { color: #819aaa; }
+.parcel-map-error { position: absolute; z-index: 500; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 3px; max-width: 230px; padding: 8px 10px; color: #991b1b; background: rgba(254, 242, 242, .95); border: 1px solid #fecaca; border-radius: 6px; font-size: 10px; }
+.parcel-map-shell { position: relative; }
 .transaction-history-heading { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e1edf4; }
 .leaflet-container { font: inherit; }
 
