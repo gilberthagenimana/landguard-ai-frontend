@@ -320,6 +320,25 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .form-select { width: 100%; padding: 10px 14px; border: 1px solid var(--border-line); border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box; }
 .form-input { width: 100%; padding: 10px 14px; border: 1px solid var(--border-line); border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box; }
 .form-input:focus, .form-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); outline: none; }
+.form-section { border: 1px solid var(--border-line); border-radius: 10px; padding: 14px; margin: 18px 0; }
+.form-section legend { padding: 0 6px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.parcel-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.parcel-filters label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.parcel-filters input, .parcel-filters select { width: 100%; min-height: 36px; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border-line); border-radius: 7px; background: #fff; color: var(--ink); }
+.parcel-refresh { min-height: 36px; }
+.parcels-table { min-width: 1180px; }
+.parcel-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.parcel-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border-line); }
+.parcel-detail-grid div { display: grid; gap: 4px; }
+.parcel-detail-grid span, .parcel-detail-list h3 { font-size: 12px; color: var(--muted); }
+.parcel-detail-grid strong { font-size: 14px; color: var(--ink); }
+.parcel-detail-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 18px; }
+.parcel-detail-list { min-width: 0; }
+.parcel-detail-list h3 { margin: 0 0 8px; color: var(--ink); }
+.parcel-detail-list p, .parcel-detail-list li { font-size: 13px; color: var(--muted); }
+.parcel-detail-list ul { display: grid; gap: 7px; margin: 0; padding-left: 18px; }
+.parcel-details-close { float: right; margin-top: 10px; }
+@media (max-width: 760px) { .parcel-pagination { justify-content: space-between; flex-wrap: wrap; } .parcel-detail-columns { grid-template-columns: 1fr; } }
 .form-hint { font-size: 11px; color: #64748b; margin-top: 4px; }
 
 /* ===== ALERT ===== */

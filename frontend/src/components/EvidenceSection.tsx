@@ -1,7 +1,7 @@
 /**
  * Evidence Section — upload, view, and review transaction supporting documents.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ChangeEvent } from 'react'
 import {
   Upload,
@@ -53,6 +53,8 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
   const [paymentRef, setPaymentRef] = useState('')
   const [notes, setNotes] = useState('')
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const loadEvidence = async () => {
     setLoading(true)
     try {
@@ -89,7 +91,7 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
       setStatedAmount('')
       setPaymentRef('')
       setNotes('')
-      setShowUploadForm(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       await loadEvidence()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -171,6 +173,7 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
               File (PDF, JPEG, PNG — max 10 MB)
             </label>
             <input
+              ref={fileInputRef}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png"
               onChange={handleFileChange}
@@ -287,14 +290,14 @@ export default function EvidenceSection({ transactionId, canUpload, canReview }:
                 )}
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <a
-                    href={`/api/evidence/${ev.id}`}
-                    download={ev.original_filename}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px 12px', background: '#303731', borderRadius: '4px', color: '#fff', textDecoration: 'none', fontSize: '12px' }}
+                  <button
+                    type="button"
+                    onClick={() => { api.downloadEvidence(ev.id).catch(() => {}) }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px 12px', background: '#303731', borderRadius: '4px', color: '#fff', textDecoration: 'none', fontSize: '12px', cursor: 'pointer' }}
                   >
                     <Download size={12} />
                     Download
-                  </a>
+                  </button>
                   {canReview && (
                     <>
                       <button

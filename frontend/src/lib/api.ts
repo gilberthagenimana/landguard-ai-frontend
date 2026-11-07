@@ -21,10 +21,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       window.dispatchEvent(new Event('landguard-auth-expired'))
     }
     let detail = 'Request failed'
-    if (response.status === 401) {
-      detail = 'Your session has expired. Please sign in again.'
-    } else if (typeof data.detail === 'string') {
+    if (typeof data.detail === 'string' && data.detail) {
       detail = data.detail
+    } else if (response.status === 401) {
+      detail = 'Your session has expired. Please sign in again.'
     } else if (Array.isArray(data.detail)) {
       detail = data.detail
         .map((err: { msg?: string; loc?: (string | number)[] }) => {
@@ -58,7 +58,14 @@ export const api = {
   updateUser: (id: number, payload: UpdateUserPayload | object) => request<UserRecord>(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   disableUser: (id: number) => request(`/api/users/${id}`, { method: 'DELETE' }),
   reactivateUser: (id: number) => request<UserRecord>(`/api/users/${id}/reactivate`, { method: 'POST' }),
-  parcels: (q = '') => request<ParcelRecord[]>(`/api/parcels${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  parcels: (query: ParcelQuery = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') params.set(key, String(value))
+    })
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    return request<ParcelPage | ParcelRecord[]>(`/api/parcels${suffix}`)
+  },
 
   createParcel: (payload: ParcelCreatePayload) => request<ParcelRecord>('/api/parcels', { method: 'POST', body: JSON.stringify(payload) }),
   parcelByUpi: (upi: string) => request<ParcelRecord>(`/api/parcels/upi/${encodeURIComponent(upi)}`),
@@ -80,6 +87,7 @@ export const api = {
   cases: () => request<CaseRecord[]>('/api/cases'),
   caseDetail: (id: number) => request<CaseDetail>(`/api/cases/${id}`),
   updateCase: (id: number, payload: object) => request<CaseRecord>(`/api/cases/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  updateTransactionStatus: (id: number, payload: { status: string; reason?: string }) => request<TransactionRecord>(`/api/transactions/${id}/status`, { method: 'PUT', body: JSON.stringify(payload) }),
   audit: () => request<AuditRecord[]>('/api/audit-logs'),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
@@ -94,6 +102,26 @@ export const api = {
     return request<EvidenceOut>(`/api/evidence/transactions/${transactionId}`, { method: 'POST', body: formData })
   },
   reviewEvidence: (evidenceId: number, payload: { status: string; reviewNotes: string }) => request<EvidenceOut>(`/api/evidence/${evidenceId}/review`, { method: 'PUT', body: JSON.stringify(payload) }),
+  downloadEvidence: async (evidenceId: number) => {
+    const token = getToken()
+    const headers: Record<string, string> = { Accept: 'application/octet-stream' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const response = await fetch(`${apiUrl}/api/evidence/${evidenceId}`, { headers })
+    if (!response.ok) {
+      let detail = 'Failed to download evidence'
+      try { const data = await response.json(); if (typeof data?.detail === 'string') detail = data.detail } catch { /* ignore */ }
+      throw new Error(detail)
+    }
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'evidence'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+  },
   // The backend has no 'list all evidence' route, so gather evidence per transaction (latest 100).
   evidenceList: async (): Promise<EvidenceOut[]> => {
     const txs = await request<TransactionRecord[]>('/api/transactions')
@@ -126,6 +154,15 @@ export type ParcelCreatePayload = {
   area_ha: number
   status?: string
   registration_reference?: string
+  owner: {
+    owner_type: 'INDIVIDUAL' | 'ORGANIZATION'
+    full_name: string
+    identification_number: string
+    phone?: string
+    email?: string
+    organization_name?: string
+    registration_number?: string
+  }
 }
 
 export type RoleRecord = { name: string }
@@ -171,8 +208,17 @@ export type ParcelRecord = {
   village: string
   area_ha: number
   status: string
+  created_at: string
   current_owner_name?: string | null
   current_owner_id?: number | null
+  current_owner_type?: 'INDIVIDUAL' | 'ORGANIZATION' | null
+  current_organization_name?: string | null
+  owner?: {
+    id: number
+    full_name: string
+    owner_type: 'INDIVIDUAL' | 'ORGANIZATION'
+    organization_name?: string | null
+  } | null
   updated_at: string
   latitude?: number | null
   longitude?: number | null
@@ -181,6 +227,27 @@ export type ParcelRecord = {
   location_data_source?: string | null
   location_verification_status?: string
   location_verification_metadata?: Record<string, unknown> | null
+}
+export type ParcelQuery = {
+  q?: string
+  parcel_code?: string
+  upi?: string
+  owner_name?: string
+  province?: string
+  district?: string
+  sector?: string
+  status?: string
+  page?: number
+  page_size?: number
+  sort_by?: 'parcel_code' | 'created_at' | 'status' | 'area_ha'
+  sort_order?: 'asc' | 'desc'
+}
+export type ParcelPage = {
+  items: ParcelRecord[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
 }
 export type OwnerRecord = {
   id: number

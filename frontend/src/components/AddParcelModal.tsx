@@ -12,6 +12,12 @@ const empty = {
   sector: '', cell: '', village: '', area_ha: '', registration_reference: '',
 }
 
+const emptyOwner = {
+  owner_type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'ORGANIZATION',
+  full_name: '', identification_number: '', phone: '', email: '',
+  organization_name: '', registration_number: '',
+}
+
 const fields: { key: keyof typeof empty; label: string; required?: boolean; type?: string; hint?: string }[] = [
   { key: 'upi', label: 'UPI', required: true, hint: 'Unique parcel identifier, for example 1/02/03/04/567' },
   { key: 'parcel_code', label: 'Parcel code', required: true },
@@ -27,6 +33,7 @@ const fields: { key: keyof typeof empty; label: string; required?: boolean; type
 
 export default function AddParcelModal({ onClose, onCreated }: { onClose: () => void; onCreated?: () => void }) {
   const [form, setForm] = useState(empty)
+  const [owner, setOwner] = useState(emptyOwner)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState('')
@@ -55,6 +62,17 @@ export default function AddParcelModal({ onClose, onCreated }: { onClose: () => 
         village: form.village.trim(),
         area_ha: area,
         ...(form.registration_reference.trim() ? { registration_reference: form.registration_reference.trim() } : {}),
+        owner: {
+          owner_type: owner.owner_type,
+          full_name: owner.full_name.trim(),
+          identification_number: owner.identification_number.trim(),
+          ...(owner.phone.trim() ? { phone: owner.phone.trim() } : {}),
+          ...(owner.email.trim() ? { email: owner.email.trim() } : {}),
+          ...(owner.owner_type === 'ORGANIZATION' ? {
+            organization_name: owner.organization_name.trim(),
+            registration_number: owner.registration_number.trim(),
+          } : {}),
+        },
       })
       setCreated(parcel.parcel_code)
       onCreated?.()
@@ -100,6 +118,49 @@ export default function AddParcelModal({ onClose, onCreated }: { onClose: () => 
                 {f.hint && <div className="form-hint">{f.hint}</div>}
               </div>
             ))}
+            <fieldset className="form-section">
+              <legend>Parcel Owner Information</legend>
+              <div className="form-group">
+                <label className="form-label" htmlFor="parcel-owner-type">Owner type</label>
+                <select
+                  id="parcel-owner-type"
+                  className="form-input"
+                  value={owner.owner_type}
+                  onChange={(e) => setOwner({ ...owner, owner_type: e.target.value as typeof owner.owner_type })}
+                >
+                  <option value="INDIVIDUAL">Individual</option>
+                  <option value="ORGANIZATION">Organization</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="parcel-owner-name">Owner full name</label>
+                <input id="parcel-owner-name" className="form-input" required value={owner.full_name} onChange={(e) => setOwner({ ...owner, full_name: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="parcel-owner-id">National ID number</label>
+                <input id="parcel-owner-id" className="form-input" required value={owner.identification_number} onChange={(e) => setOwner({ ...owner, identification_number: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="parcel-owner-phone">Phone number (optional)</label>
+                <input id="parcel-owner-phone" className="form-input" type="tel" value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="parcel-owner-email">Email address (optional)</label>
+                <input id="parcel-owner-email" className="form-input" type="email" value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} />
+              </div>
+              {owner.owner_type === 'ORGANIZATION' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="parcel-organization-name">Organization name</label>
+                    <input id="parcel-organization-name" className="form-input" required value={owner.organization_name} onChange={(e) => setOwner({ ...owner, organization_name: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="parcel-registration-number">Organization registration number</label>
+                    <input id="parcel-registration-number" className="form-input" required value={owner.registration_number} onChange={(e) => setOwner({ ...owner, registration_number: e.target.value })} />
+                  </div>
+                </>
+              )}
+            </fieldset>
             <div className="modal-actions">
               <button type="button" className="btn-secondary btn-sm" onClick={onClose}>Cancel</button>
               <button type="submit" className="btn-primary btn-sm" disabled={submitting}>{submitting ? 'Saving…' : 'Add parcel'}</button>

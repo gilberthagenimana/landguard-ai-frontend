@@ -3,12 +3,12 @@
  * fraud-risk warnings, pending case reviews and shortcuts to the existing officer pages.
  * Shows real API data only; empty states are shown instead of sample rows.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Activity, AlertTriangle, ArrowLeftRight, CheckCircle, Clock, FileUp, MapPin, PlusCircle, Search, ShieldCheck,
+  Activity, AlertTriangle, ArrowLeftRight, CheckCircle, Clock, FileUp, MapPin, PlusCircle, RotateCcw, Search, ShieldCheck,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { api, type CaseRecord, type CurrentUser, type DashboardStats, type TransactionRecord } from '../lib/api'
+import { api, type CaseRecord, type CurrentUser, type DashboardStats, type ParcelRecord, type TransactionRecord } from '../lib/api'
 import RiskDonut from './RiskDonut'
 import AddParcelModal from './AddParcelModal'
 import {
@@ -28,12 +28,22 @@ interface OfficerDashboardProps {
 
 const OPEN_CASE = ['OPEN', 'UNDER_REVIEW', 'NEEDS_INFORMATION']
 
+const PARCEL_PAGE_SIZE = 10
+
 export default function OfficerDashboard({ stats, onNavigate, onNewTransaction }: OfficerDashboardProps) {
   const [txs, setTxs] = useState<TransactionRecord[]>([])
   const [cases, setCases] = useState<CaseRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState<string[]>([])
   const [showAddParcel, setShowAddParcel] = useState(false)
+  const [parcels, setParcels] = useState<ParcelRecord[]>([])
+  const [parcelsLoading, setParcelsLoading] = useState(true)
+  const [parcelsFailed, setParcelsFailed] = useState(false)
+  const [parcelQuery, setParcelQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [expandedParcelId, setExpandedParcelId] = useState<number | null>(null)
+  const [parcelPage, setParcelPage] = useState(1)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -45,7 +55,17 @@ export default function OfficerDashboard({ stats, onNavigate, onNewTransaction }
       setLoading(false)
     })
   }, [])
+
+  const loadParcels = useCallback(() => {
+    setParcelsLoading(true)
+    api.parcels({ page: 1, page_size: 100 })
+      .then((result) => { setParcels(Array.isArray(result) ? result : result.items); setParcelsFailed(false) })
+      .catch(() => setParcelsFailed(true))
+      .finally(() => setParcelsLoading(false))
+  }, [])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadParcels() }, [loadParcels])
 
   const recent = useMemo(
     () => [...txs].sort((a, b) => (b.transaction_date ?? '').localeCompare(a.transaction_date ?? '')).slice(0, 6),
@@ -58,6 +78,28 @@ export default function OfficerDashboard({ stats, onNavigate, onNewTransaction }
   const openCases = cases.filter((c) => OPEN_CASE.includes(c.status)).slice(0, 4)
   const completed = txs.filter((t) => (t.status ?? '').toUpperCase() === 'COMPLETED').length
   const riskTotal = stats.low_risk_transactions + stats.medium_risk_transactions + stats.high_risk_transactions
+
+  const statusOptions = useMemo(() => {
+    const values = new Set<string>()
+    parcels.forEach((p) => { const s = (p.status ?? '').toUpperCase(); if (s) values.add(s) })
+    return ['ALL', ...Array.from(values)]
+  }, [parcels])
+
+  const filteredParcels = useMemo(() => {
+    const q = parcelQuery.trim().toLowerCase()
+    const location = locationFilter.trim().toLowerCase()
+    return parcels.filter((p) => {
+      if (statusFilter !== 'ALL' && (p.status ?? '').toUpperCase() !== statusFilter) return false
+      if (location && !(p.location ?? '').toLowerCase().includes(location)) return false
+      if (!q) return true
+      const owner = (p.current_owner_name ?? '').toLowerCase()
+      return [p.parcel_code, p.upi ?? '', p.location, p.district, owner].some((v) => v.toLowerCase().includes(q))
+    })
+  }, [parcels, parcelQuery, statusFilter, locationFilter])
+
+  const parcelTotalPages = Math.max(1, Math.ceil(filteredParcels.length / PARCEL_PAGE_SIZE))
+  const safeParcelPage = Math.min(parcelPage, parcelTotalPages)
+  const paginatedParcels = filteredParcels.slice((safeParcelPage - 1) * PARCEL_PAGE_SIZE, safeParcelPage * PARCEL_PAGE_SIZE)
 
   const actions: { icon: LucideIcon; tone: Tone; title: string; text: string; run: () => void }[] = [
     { icon: Search, tone: 'blue', title: 'Search parcel', text: 'Find a parcel by UPI', run: () => onNavigate('Search Parcel') },
@@ -89,6 +131,100 @@ export default function OfficerDashboard({ stats, onNavigate, onNewTransaction }
         <StatCard icon={AlertTriangle} tone="red" label="High-risk alerts" value={stats.high_risk_transactions} hint="Transactions at high risk" onClick={() => onNavigate('Pending Reviews')} />
         <StatCard icon={CheckCircle} tone="green" label="Completed" value={loading ? '–' : completed} hint="Finished transactions" onClick={() => onNavigate('Transactions')} />
       </div>
+
+      <Panel
+        title="Parcels"
+        subtitle="Registered land parcels from the active database"
+        action={<button type="button" className="btn-secondary btn-sm" onClick={loadParcels}><RotateCcw size={14} /> Refresh</button>}
+      >
+        <div className="filter-bar" style={{ flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Search by parcel code, UPI or owner..."
+            value={parcelQuery}
+            onChange={(e) => { setParcelQuery(e.target.value); setParcelPage(1) }}
+            style={{ flex: 1, minWidth: '180px' }}
+          />
+          <select className="filter-select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setParcelPage(1) }}>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>{s === 'ALL' ? 'Status: All' : humanize(s)}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Filter by location..."
+            value={locationFilter}
+            onChange={(e) => { setLocationFilter(e.target.value); setParcelPage(1) }}
+            style={{ flex: 1, minWidth: '180px' }}
+          />
+        </div>
+
+        {parcelsFailed ? (
+          <ErrorNote message="Could not load parcels. Check that the backend is running and the database is reachable." onRetry={loadParcels} />
+        ) : parcelsLoading ? (
+          <LoadingRows rows={6} />
+        ) : filteredParcels.length === 0 ? (
+          <EmptyState title="No parcels found" text="Register a parcel or adjust the search and filters." />
+        ) : (
+          <div className="lg-table-wrap">
+            <table className="lg-table">
+              <thead>
+                <tr>
+                  <th>Parcel code</th>
+                  <th>UPI</th>
+                  <th>Location</th>
+                  <th className="lg-num">Size (ha)</th>
+                  <th>Owner</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedParcels.map((p) => (
+                  <Fragment key={p.id}>
+                    <tr>
+                      <td><strong>{p.parcel_code}</strong></td>
+                      <td>{p.upi ?? '—'}</td>
+                      <td>{p.location}</td>
+                      <td className="lg-num">{Number(p.area_ha ?? 0)}</td>
+                      <td>{p.current_owner_name ?? '—'}</td>
+                      <td><StatusBadge status={p.status} /></td>
+                      <td>{formatDateTime(p.created_at)}</td>
+                      <td><button type="button" className="btn-secondary btn-sm" onClick={() => setExpandedParcelId(expandedParcelId === p.id ? null : p.id)}>Details</button></td>
+                    </tr>
+                    {expandedParcelId === p.id && (
+                      <tr>
+                        <td colSpan={8}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                            <div><span>Province</span><strong>{p.province}</strong></div>
+                            <div><span>District</span><strong>{p.district}</strong></div>
+                            <div><span>Sector</span><strong>{p.sector}</strong></div>
+                            <div><span>Cell</span><strong>{p.cell}</strong></div>
+                            <div><span>Village</span><strong>{p.village}</strong></div>
+                            <div><span>Coordinates</span><strong>{p.latitude != null && p.longitude != null ? `${p.latitude}, ${p.longitude}` : '—'}</strong></div>
+                            <div><span>Verification</span><strong>{humanize(p.location_verification_status)}</strong></div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {filteredParcels.length > PARCEL_PAGE_SIZE && (
+          <div className="pagination" style={{ marginTop: '12px' }}>
+            <button type="button" className="page-btn" disabled={safeParcelPage <= 1} onClick={() => setParcelPage((p) => Math.max(1, p - 1))}>&lt;</button>
+            <button type="button" className="page-btn page-btn--active">{safeParcelPage}</button>
+            <button type="button" className="page-btn" disabled={safeParcelPage >= parcelTotalPages} onClick={() => setParcelPage((p) => Math.min(parcelTotalPages, p + 1))}>&gt;</button>
+          </div>
+        )}
+      </Panel>
 
       <div className="lg-row lg-row--wide-left">
         <Panel title="Recent transactions" subtitle="Latest transfers and their verification status" action={<button type="button" className="lg-link" onClick={() => onNavigate('Transactions')}>All transactions</button>}>
@@ -189,7 +325,7 @@ export default function OfficerDashboard({ stats, onNavigate, onNewTransaction }
         <span>Decision support only. AI predictions do not replace official Rwandan land authorities.</span>
       </footer>
 
-      {showAddParcel && <AddParcelModal onClose={() => setShowAddParcel(false)} onCreated={load} />}
+      {showAddParcel && <AddParcelModal onClose={() => setShowAddParcel(false)} onCreated={loadParcels} />}
     </div>
   )
 }

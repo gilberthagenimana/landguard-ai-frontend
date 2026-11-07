@@ -21,6 +21,7 @@ import AuditorDashboard from './components/AuditorDashboard'
 import EvidenceSection from './components/EvidenceSection'
 import ParcelMap from './components/ParcelMap'
 import AddUserModal from './components/AddUserModal'
+import ParcelsPage from './components/ParcelsPage'
 import './dashboard.css'
 
 
@@ -32,6 +33,7 @@ const navigation = [
   { label: 'User Management', icon: Users },
   { label: 'System Settings', icon: Settings },
   { label: 'Search Parcel', icon: Search },
+  { label: 'Parcels', icon: MapPin },
   { label: 'Transactions', icon: ArrowLeftRight },
   { label: 'Transactions Overview', icon: ArrowLeftRight },
   { label: 'Evidence', icon: FileText },
@@ -44,9 +46,9 @@ const navigation = [
 ]
 
 const roleNavigation: Record<string, string[]> = {
-  ADMIN: ['Dashboard', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Reports', 'Profile'],
-  OFFICER: ['Dashboard', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
-  AUDITOR: ['Dashboard', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
+  ADMIN: ['Dashboard', 'Parcels', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Reports', 'Profile'],
+  OFFICER: ['Dashboard', 'Parcels', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
+  AUDITOR: ['Dashboard', 'Parcels', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
 }
 
 export default function App() {
@@ -154,6 +156,7 @@ export default function App() {
           />}
           {activeNav === 'User Management' && <UserManagementPage />}
           {activeNav === 'System Settings' && <SystemSettingsPage />}
+          {activeNav === 'Parcels' && <ParcelsPage canCreate={role !== 'AUDITOR'} />}
           {activeNav === 'Search Parcel' && <SearchParcelPage />}
           {activeNav === 'Transactions' && (
             <TransactionsPage
@@ -410,11 +413,14 @@ function NewTransactionModal({
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.parcels().then((res) => setParcels(res.map(p => ({
+    api.parcels({ page: 1, page_size: 100 }).then((response) => {
+      const rows = Array.isArray(response) ? response : response.items
+      setParcels(rows.map(p => ({
       id: p.id, upi: p.upi || p.parcel_code || `UPI-${p.id}`, parcel_code: p.parcel_code || `RW-${p.id}`,
       owner_id: p.current_owner_id, owner_name: p.current_owner_name,
       location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location, status: p.status,
-    })))).catch((err) => setError(err instanceof Error ? err.message : 'Unable to load parcels.'))
+      })))
+    }).catch((err) => setError(err instanceof Error ? err.message : 'Unable to load parcels.'))
   }, [])
 
   useEffect(() => {
@@ -1168,22 +1174,48 @@ function TransactionsPage({
    EVIDENCE PAGE
    ========================================================================= */
 function EvidencePage() {
-  const [evidence, setEvidence] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
+  const [selectedTxId, setSelectedTxId] = useState<number | null>(null)
 
-  useEffect(() => { api.evidenceList?.().then(setEvidence).catch(() => {}).finally(() => setLoading(false)) }, [])
+  useEffect(() => {
+    let cancelled = false
+    api.transactions()
+      .then((txs) => {
+        if (cancelled) return
+        setTransactions(txs)
+        if (txs.length > 0 && !txs.some((t) => t.id === selectedTxId)) setSelectedTxId(txs[0].id)
+      })
+      .catch(() => { if (!cancelled) setSelectedTxId(null) })
+    return () => { cancelled = true }
+  }, [selectedTxId])
+
+  const selectedTx = transactions.find((t) => t.id === selectedTxId) ?? null
 
   return (
     <div className="workspace-page evidence-page">
-      <div className="page-heading"><div><h1>Evidence</h1><p className="heading-subtitle">Upload and manage supporting documents for transactions.</p></div><button className="btn-primary"><Upload size={15} /> Upload Evidence</button></div>
-      <div className="card"><div className="upload-zone"><Upload size={32} className="upload-icon" /><p className="upload-text">Drag and drop files here or click to browse</p><p className="upload-hint">Supported formats: PDF, JPG, PNG (max 10MB per file)</p></div></div>
-      {loading ? <p className="text-muted">Loading...</p> : evidence.length === 0 ? (
-        <div className="card"><div className="card-header"><h3>Evidence Documents</h3></div><p className="text-muted">No evidence documents uploaded yet.</p></div>
-      ) : (
-        <div className="card"><div className="card-header"><h3>Evidence Documents</h3></div>
-          <table className="data-table"><thead><tr><th>Document</th><th>Transaction</th><th>Uploaded By</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
-            <tbody>{evidence.map((ev, i) => (<tr key={i}><td><strong>{ev.original_filename || 'Document'}</strong></td><td>TX-{String(ev.transaction_id).padStart(4, '0')}</td><td>{ev.uploaded_by_name || 'Officer'}</td><td><span className={`evidence-badge evidence-${ev.status.toLowerCase().replace(/_/g, '-')}`}>{ev.status.replace(/_/g, ' ')}</span></td><td>{new Date(ev.created_at).toLocaleDateString()}</td><td><button className="btn-icon"><Eye size={14} /></button></td></tr>))}</tbody></table>
+      <div className="page-heading">
+        <div>
+          <h1>Evidence</h1>
+          <p className="heading-subtitle">Upload and manage supporting documents for transactions.</p>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="card-header">
+          <label className="form-label">Select Transaction</label>
+          <select value={selectedTxId ?? ''} onChange={(e) => setSelectedTxId(e.target.value ? Number(e.target.value) : null)} className="form-select">
+            <option value="">Select a transaction...</option>
+            {transactions.map((tx) => (
+              <option key={tx.id} value={tx.id}>{tx.transaction_code} — {tx.parcel_code} — {tx.seller_name} → {tx.buyer_name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {selectedTx ? (
+        <EvidenceSection transactionId={selectedTx.id} canUpload canReview />
+      ) : (
+        <div className="card"><p className="text-muted">Select a transaction to view or upload evidence.</p></div>
       )}
     </div>
   )
@@ -1228,7 +1260,13 @@ function PendingReviewsPage() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [filter, setFilter] = useState('all')
+  const [reviewCaseId, setReviewCaseId] = useState<number | null>(null)
+  const [decision, setDecision] = useState<'APPROVED' | 'REJECTED' | null>(null)
+  const [reviewReason, setReviewReason] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewError, setReviewError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -1251,6 +1289,8 @@ function PendingReviewsPage() {
     const tx = txById.get(c.transaction_id)
     return {
       key: c.case_code || `CASE-${c.id}`,
+      caseId: c.id,
+      transactionId: c.transaction_id,
       upi: c.parcel_code || tx?.parcel_code || 'N/A',
       seller: tx?.seller_name || 'N/A',
       buyer: tx?.buyer_name || 'N/A',
@@ -1274,6 +1314,41 @@ function PendingReviewsPage() {
     clarification: rows.filter((r) => r.status === 'UNDER_REVIEW').length,
   }
 
+  const reviewTarget = cases.find((c) => c.id === reviewCaseId) ?? null
+
+  const openReview = (caseId: number) => {
+    setReviewCaseId(caseId)
+    setDecision(null)
+    setReviewReason('')
+    setReviewError('')
+    setSuccess('')
+  }
+
+  const submitDecision = async () => {
+    if (!reviewTarget || !decision) return
+    const outcome = decision
+    const finalReason = outcome === 'REJECTED'
+      ? (reviewReason.trim() || 'Rejected during review')
+      : (reviewReason.trim() || 'Approved after review')
+    setReviewing(true)
+    setReviewError('')
+    setSuccess('')
+    try {
+      const updated = await api.updateTransactionStatus(reviewTarget.transaction_id, { status: outcome, reason: finalReason })
+      setSuccess(`Transaction ${updated.transaction_code} was ${outcome === 'APPROVED' ? 'approved' : 'rejected'}.`)
+      const [caseList, txList] = await Promise.all([api.cases(), api.transactions()])
+      setCases(caseList || [])
+      setTransactions(txList || [])
+      setReviewCaseId(null)
+      setDecision(null)
+      setReviewReason('')
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'Review failed')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
   return (
     <div className="workspace-page pending-reviews-page">
       <h2 className="page-title">Pending Reviews</h2><p className="page-subtitle">Transactions that need your attention.</p>
@@ -1284,8 +1359,37 @@ function PendingReviewsPage() {
       ) : (
         <>
       <div className="filter-tabs"><button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All ({tabCounts.all})</button><button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk ({tabCounts.high})</button><button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence ({tabCounts.missing})</button><button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification ({tabCounts.clarification})</button></div>
+
+      {reviewCaseId && reviewTarget && (
+        <div className="card" style={{ marginBottom: '16px' }}>
+          <div className="card-header">
+            <h3>{reviewTarget.case_code}</h3>
+            <button className="btn-secondary btn-sm" onClick={() => { setReviewCaseId(null); setDecision(null); setReviewReason(''); setReviewError(''); }}>Close</button>
+          </div>
+          <p className="text-muted" style={{ marginTop: 0 }}>Transaction {reviewTarget.transaction_id} — evidence and risk context are reviewed before an approval or rejection decision.</p>
+          {reviewError && <div className="alert alert--error">{reviewError}</div>}
+          {success && <div className="alert alert--success">{success}</div>}
+          {decision === null ? (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-primary" onClick={() => { setDecision('APPROVED') }}>Approve</button>
+              <button className="btn-secondary" onClick={() => { setDecision('REJECTED') }}>Reject</button>
+            </div>
+          ) : (
+            <>
+              <label className="form-label">Decision Reason</label>
+              <textarea value={reviewReason} onChange={(e) => setReviewReason(e.target.value)} rows={3} style={{ width: '100%', padding: '8px', background: '#101310', border: '1px solid #303731', borderRadius: '4px', color: '#fff', marginBottom: '8px' }} />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-primary" disabled={reviewing} onClick={submitDecision}>
+                  {reviewing ? 'Submitting...' : decision === 'APPROVED' ? 'Confirm Approval' : 'Confirm Rejection'}
+                </button>
+                <button className="btn-secondary" disabled={reviewing} onClick={() => { setDecision(null); setReviewReason('') }}>Back</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <div className="table-card"><table className="data-table"><thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller → Buyer</th><th>Reason</th><th>Evidence Status</th><th>Date</th><th>Actions</th></tr></thead>
-        <tbody>{filteredRows.length === 0 ? (<tr><td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>No pending reviews found.</td></tr>) : filteredRows.map((r) => (<tr key={r.key}><td><strong>{r.key}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(/_/g, '-')}`}>{r.evidence.replace(/_/g, ' ')}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm">Review Details</button></td></tr>))}</tbody></table>
+        <tbody>{filteredRows.length === 0 ? (<tr><td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>No pending reviews found.</td></tr>) : filteredRows.map((r) => (<tr key={r.key}><td><strong>{r.key}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(/_/g, '-')}`}>{r.evidence.replace(/_/g, ' ')}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm" onClick={() => openReview(r.caseId)}>Review Details</button></td></tr>))}</tbody></table>
         <div className="table-footer"><span>Showing {filteredRows.length} of {rows.length}</span><div className="pagination"><button className="page-btn" disabled>&lt;</button><button className="page-btn page-btn--active">1</button><button className="page-btn" disabled>&gt;</button></div></div>
         </div>
         </>
