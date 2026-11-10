@@ -82,6 +82,12 @@ export const api = {
   verify: (id: number) => request<VerificationResponse>(`/api/verification/transactions/${id}`, { method: 'POST' }),
 
   storedVerification: (id: number) => request<VerificationResult[]>(`/api/transactions/${id}/verification`),
+  transactionReviewDetails: (id: number) => request<TransactionReviewDetails>(`/api/transactions/${id}/review-details`),
+  submitReviewDecision: (id: number, payload: { action: string; explanation: string; evidence_notes?: string; investigation_findings?: string }) =>
+    request<TransactionRecord>(`/api/transactions/${id}/review-decision`, { method: 'POST', body: JSON.stringify(payload) }),
+  confirmTransfer: (id: number, payload: { supporting_reference: string; notes?: string }) =>
+    request<TransactionRecord>(`/api/transactions/${id}/confirm-transfer`, { method: 'POST', body: JSON.stringify(payload) }),
+  transactionStatusHistory: (id: number) => request<TransactionStatusHistoryRecord[]>(`/api/transactions/${id}/status-history`),
   analyze: (id: number) => request<RiskResponse>(`/api/risk-analysis/transactions/${id}`, { method: 'POST' }),
   storedRisk: (id: number) => request<RiskResponse[]>(`/api/risk-analysis/transactions/${id}`),
   cases: () => request<CaseRecord[]>('/api/cases'),
@@ -89,6 +95,18 @@ export const api = {
   updateCase: (id: number, payload: object) => request<CaseRecord>(`/api/cases/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   updateTransactionStatus: (id: number, payload: { status: string; reason?: string }) => request<TransactionRecord>(`/api/transactions/${id}/status`, { method: 'PUT', body: JSON.stringify(payload) }),
   audit: () => request<AuditRecord[]>('/api/audit-logs'),
+  notifications: (query: { event_type?: string; priority?: string; is_read?: boolean; q?: string } = {}) => {
+    const params = new URLSearchParams()
+    if (query.event_type) params.set('event_type', query.event_type)
+    if (query.priority) params.set('priority', query.priority)
+    if (query.is_read !== undefined) params.set('is_read', String(query.is_read))
+    if (query.q) params.set('q', query.q)
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    return request<NotificationRecord[]>(`/api/notifications${suffix}`)
+  },
+  unreadNotificationCount: () => request<{ unread_count: number }>('/api/notifications/unread-count'),
+  markNotificationRead: (id: number) => request<NotificationRecord>(`/api/notifications/${id}/read`, { method: 'POST' }),
+  markAllNotificationsRead: () => request<{ unread_count: number; updated: number }>('/api/notifications/mark-all-read', { method: 'POST' }),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
   evidenceForTransaction: (transactionId: number) => request<EvidenceOut[]>(`/api/evidence/transactions/${transactionId}`),
@@ -140,6 +158,20 @@ export type DashboardStats = {
   high_risk_transactions: number
   recent_verification_activity: { action: string; entity: string; entity_id: string | null; created_at: string }[]
   recent_alerts: { id: string; title: string; meta: string; risk: string }[]
+}
+
+export type NotificationRecord = {
+  id: number
+  recipient_user_id: number
+  event_type: string
+  title: string
+  description?: string | null
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  related_parcel_upi?: string | null
+  related_transaction_code?: string | null
+  is_read: boolean
+  created_at: string
+  read_at?: string | null
 }
 
 export type ParcelCreatePayload = {
@@ -279,6 +311,7 @@ export type TransactionRecord = {
   transaction_type: string
   transaction_date: string
   declared_value?: string | number | null
+  supporting_reference?: string | null
   status: string
   latest_risk_level?: string | null
   latest_risk_score?: number | null
@@ -324,8 +357,14 @@ export type PublicParcelOut = {
   location: string
   district: string
   status: string
+  availability: string
   has_pending_transaction: boolean
+  transaction_id?: number | null
+  transaction_code?: string | null
+  transaction_status?: string | null
   warning_message: string | null
+  registered_owner_name?: string | null
+  registered_owner_id?: number | null
   public_notice: string
 }
 
@@ -357,4 +396,35 @@ export type EvidenceReviewHistoryOut = {
   changed_by: number | null
   reason: string | null
   created_at: string
+}
+
+export type TransactionStatusHistoryRecord = {
+  id?: number
+  previous_status: string | null
+  new_status: string
+  changed_by: number | null
+  reason: string | null
+  created_at: string
+}
+
+export type TransactionReviewDetails = {
+  transaction: TransactionRecord
+  parcel: ParcelRecord | null
+  current_owner: OwnerRecord | null
+  seller: OwnerRecord | null
+  buyer: OwnerRecord | null
+  evidence: EvidenceOut[]
+  ownership_history: OwnershipRecord[]
+  ai_risk: {
+    risk_score: number
+    risk_level: string
+    explanation: string
+    indicators: string[]
+    model_version?: string
+    disclaimer: string
+  } | null
+  verification_results: VerificationResult[]
+  review_decisions: TransactionStatusHistoryRecord[]
+  can_review: boolean
+  cannot_review_reason: string | null
 }

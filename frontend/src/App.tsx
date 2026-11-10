@@ -1,3 +1,4 @@
+import TransactionReviewCenter from './components/TransactionReviewCenter'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
@@ -11,7 +12,7 @@ import {
 import {
   api, type AuthSession, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
   type DashboardStats, type DatabaseHealth, type FileStoragePolicy, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
-  type RiskResponse, type Setting, type TransactionRecord, type UserRecord,
+  type NotificationRecord, type RiskResponse, type Setting, type TransactionRecord, type UserRecord,
   type VerificationResponse, type VerificationResult,
 } from './lib/api'
 import PublicUpiCheck from './components/PublicUpiCheck'
@@ -22,6 +23,7 @@ import EvidenceSection from './components/EvidenceSection'
 import ParcelMap from './components/ParcelMap'
 import AddUserModal from './components/AddUserModal'
 import ParcelsPage from './components/ParcelsPage'
+import NotificationsPage from './components/NotificationsPage'
 import './dashboard.css'
 
 
@@ -30,6 +32,7 @@ type Page = 'Dashboard' | 'Search Parcel' | 'Transactions' | 'Evidence' | 'Verif
 
 const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Transaction Review', icon: ShieldCheck },
   { label: 'User Management', icon: Users },
   { label: 'System Settings', icon: Settings },
   { label: 'Search Parcel', icon: Search },
@@ -41,14 +44,15 @@ const navigation = [
   { label: 'Verification', icon: ShieldCheck },
   { label: 'Pending Reviews', icon: Clock },
   { label: 'Audit Logs', icon: ClipboardList },
+  { label: 'Notifications', icon: Bell },
   { label: 'Reports', icon: BarChart3 },
   { label: 'Profile', icon: UserRound },
 ]
 
 const roleNavigation: Record<string, string[]> = {
-  ADMIN: ['Dashboard', 'Parcels', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Reports', 'Profile'],
+  ADMIN: ['Dashboard', 'Transaction Review', 'Parcels', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Notifications', 'Reports', 'Profile'],
   OFFICER: ['Dashboard', 'Parcels', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
-  AUDITOR: ['Dashboard', 'Parcels', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
+  AUDITOR: ['Dashboard', 'Transaction Review', 'Parcels', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
 }
 
 export default function App() {
@@ -61,6 +65,10 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [openCreateModal, setOpenCreateModal] = useState(false)
   const [selectedVerificationTxId, setSelectedVerificationTxId] = useState<number | null>(null)
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [reviewTxId, setReviewTxId] = useState<number | null>(null)
 
   const loadCurrentUserAndStats = async () => {
     try {
@@ -89,6 +97,22 @@ export default function App() {
     localStorage.removeItem('landguard_demo_session')
     setAuthenticated(false)
     setCurrentUser(null)
+  }
+
+  const refreshNotifications = async () => {
+    try {
+      const [items, unread] = await Promise.all([api.notifications(), api.unreadNotificationCount()])
+      setNotifications(items || [])
+      setUnreadCount(unread?.unread_count ?? 0)
+    } catch { /* The notification views surface their own error states. */ }
+  }
+
+  const markNotificationRead = async (id: number) => {
+    try {
+      const updated = await api.markNotificationRead(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true, read_at: updated?.read_at ?? new Date().toISOString() } : n)))
+      setUnreadCount((count) => Math.max(0, count - (updated?.is_read === false ? 1 : 0)))
+    } catch { /* ignore */ }
   }
 
   if (!authenticated) {
@@ -138,11 +162,28 @@ export default function App() {
           <button className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-divider">/</span><strong>{activeNav}</strong></div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Notifications" onClick={() => setActiveNav(role === 'OFFICER' ? 'Pending Reviews' : 'Audit Logs')}><Bell size={18} />{displayStats.transactions_under_review > 0 && <i />}</button>
+            <button className="icon-button" aria-label="Notifications" onClick={() => { if (!showNotifications) void refreshNotifications(); setShowNotifications((open) => !open) }}><Bell size={18} />{unreadCount > 0 && <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>
             <button className="profile-trigger" onClick={() => setShowProfileModal(true)}>
               <div className="top-avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
               <span>{currentUser?.full_name ?? 'Officer User'}</span><ChevronDown size={15} />
             </button>
+            {showNotifications && role === 'ADMIN' ? (
+              <div className="notif-dropdown">
+                <div className="notif-dropdown__head">
+                  <strong>Notifications</strong>
+                  <button type="button" className="lg-link" onClick={() => { setShowNotifications(false); setActiveNav('Notifications') }}>View all</button>
+                </div>
+                <div className="notif-dropdown__list">
+                  {notifications.slice(0, 8).map((n) => (
+                    <button key={n.id} type="button" className={`notif-item ${n.is_read ? '' : 'notif-item--unread'}`} onClick={() => void markNotificationRead(n.id)}>
+                      <span className="notif-item__title">{n.title}</span>
+                      <span className="notif-item__meta">{n.event_type}{n.related_transaction_code ? ` · ${n.related_transaction_code}` : ''}</span>
+                    </button>
+                  ))}
+                  {notifications.length === 0 ? <p className="text-muted" style={{ padding: '12px 16px', margin: 0 }}>No notifications yet.</p> : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         </header>
         <div className="content-wrap">
@@ -154,6 +195,8 @@ export default function App() {
             onNavigate={(p) => setActiveNav(p)}
             onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
           />}
+          {activeNav === 'Transaction Review' && <TransactionReviewCenter currentUser={currentUser} initialTxId={reviewTxId} />}
+          {activeNav === 'Notifications' && <NotificationsPage currentUserId={currentUser?.id} onOpenTransaction={(txId) => { setReviewTxId(txId); setActiveNav('Transaction Review') }} />}
           {activeNav === 'User Management' && <UserManagementPage />}
           {activeNav === 'System Settings' && <SystemSettingsPage />}
           {activeNav === 'Parcels' && <ParcelsPage canCreate={role !== 'AUDITOR'} />}
@@ -169,12 +212,15 @@ export default function App() {
               onNavigateToEvidence={() => {
                 setActiveNav('Evidence')
               }}
+              onNavigateToReview={() => {
+                setActiveNav('Transaction Review')
+              }}
               canManageTransactions={role === 'ADMIN'}
             />
           )}
           {activeNav === 'Evidence' && <EvidencePage />}
           {activeNav === 'Evidence Review' && <EvidenceReviewPage />}
-          {activeNav === 'Transactions Overview' && <TransactionsPage canManageTransactions={false} onNavigateToVerification={(txId) => { setSelectedVerificationTxId(txId); setActiveNav('Verification') }} onNavigateToEvidence={() => setActiveNav('Evidence Review')} />}
+          {activeNav === 'Transactions Overview' && <TransactionsPage canManageTransactions={false} onNavigateToVerification={(txId) => { setSelectedVerificationTxId(txId); setActiveNav('Verification') }} onNavigateToEvidence={() => setActiveNav('Evidence Review')} onNavigateToReview={() => setActiveNav('Transaction Review')} />}
           {activeNav === 'Verification' && <VerificationPage initialTxId={selectedVerificationTxId} />}
           {activeNav === 'Pending Reviews' && <PendingReviewsPage />}
           {activeNav === 'Audit Logs' && <AuditLogsPage />}
@@ -220,25 +266,13 @@ function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: Current
       const response = await api.login(email.trim(), password, role)
       localStorage.setItem('landguard_access_token', response.access_token)
       const user = await api.me()
+      const assignedRoles = user.roles ?? []
+      if (!assignedRoles.includes(role)) {
+        setError(`Sign-in rejected: account is not authorized for the ${role} role.`)
+        return
+      }
       onContinue(user)
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to sign in. Verify backend is running.') } finally { setLoading(false) }
-  }
-
-  const enterDemo = async () => {
-    try {
-      const loginResp = await api.login(email.trim(), password, role)
-      localStorage.setItem('landguard_access_token', loginResp.access_token)
-      const user = await api.me()
-      onContinue(user)
-    } catch {
-      if (role === 'ADMIN') {
-        onContinue({ id: 1, full_name: 'Gilbert Godson (Admin)', email: 'admin@landguard.local', is_active: true, roles: ['ADMIN'] })
-      } else if (role === 'AUDITOR') {
-        onContinue({ id: 3, full_name: 'Patrick Uwizeye (Auditor)', email: 'auditor@landguard.local', is_active: true, roles: ['AUDITOR'] })
-      } else {
-        onContinue({ id: 2, full_name: 'Marie Habyarimana (Officer)', email: 'officer@landguard.local', is_active: true, roles: ['OFFICER'] })
-      }
-    }
   }
 
   return (
@@ -293,10 +327,17 @@ function LoginScreen({ onContinue, onPublicCheck }: { onContinue: (user: Current
             <button type="button" className="forgot-password">Forgot password?</button>
             {error && <p className="login-error">{error}</p>}
             <button className="login-button" type="submit" disabled={loading}>{loading ? 'Authenticating...' : `Sign in as ${role}`}</button>
-            <label>Select your role (if required)<select value={role} onChange={(e) => setRole(e.target.value)}><option value="ADMIN">Admin</option><option value="AUDITOR">Auditor</option><option value="OFFICER">Officer</option></select></label>
           </form>
-          <button className="demo-button" onClick={enterDemo}>Launch Offline Demo Mode ({role})</button>
-          <button onClick={onPublicCheck} className="login-note-btn">Public UPI Check (No Login Required)</button>
+          <div className="public-check-card">
+            <div className="public-check-card-icon"><ShieldCheck size={28} /></div>
+            <h2 className="public-check-card-title">BUYING LAND? VERIFY IT FIRST.</h2>
+            <p className="public-check-card-subtitle">Check the status of any parcel before making a purchase.</p>
+            <button onClick={onPublicCheck} className="public-check-card-button">CHECK LAND PARCEL STATUS <Search size={16} /> <ArrowRight size={16} /></button>
+            <p className="public-check-card-note">
+              <span className="public-check-card-note-badge" aria-hidden="true">✓</span>
+              No account or login required.
+            </p>
+          </div>
           <p className="login-note">
             Admin login: admin@landguard.local / AdminPass123!<br />
             © 2025 LandGuard AI. All rights reserved.
@@ -837,12 +878,14 @@ function TransactionsPage({
   onCloseCreate,
   onNavigateToVerification,
   onNavigateToEvidence,
+  onNavigateToReview,
   canManageTransactions = false,
 }: {
   initialOpenCreate?: boolean
   onCloseCreate?: () => void
   onNavigateToVerification?: (txId: number) => void
   onNavigateToEvidence?: (txId: number) => void
+  onNavigateToReview?: (txId?: number) => void
   canManageTransactions?: boolean
 }) {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([])
@@ -1099,6 +1142,14 @@ function TransactionsPage({
                       <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
                         <button className="btn-icon" onClick={() => setViewTx(tx)} title="View transaction details">
                           <Eye size={14} />
+                        </button>
+                        <button
+                          className="btn-icon"
+                          style={{ color: '#38bdf8' }}
+                          onClick={() => onNavigateToReview?.(tx.id)}
+                          title="Open Transaction Review Center"
+                        >
+                          <ShieldCheck size={14} />
                         </button>
                         {canManageTransactions && (
                           <button

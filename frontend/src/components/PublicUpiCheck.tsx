@@ -34,6 +34,40 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const txStatus = result?.transaction_status ?? null
+  const availability = result?.availability || (result?.has_pending_transaction ? 'UNAVAILABLE' : 'AVAILABLE')
+  const pending = Boolean(result?.has_pending_transaction) && txStatus != null
+  const bannerTitle = pending && txStatus ? (
+    txStatus === 'PENDING_REVIEW' || txStatus === 'PENDING'
+      ? 'PENDING TRANSACTION'
+      : txStatus === 'UNDER_REVIEW'
+        ? 'UNDER REVIEW'
+        : txStatus === 'FLAGGED'
+          ? 'FLAGGED'
+          : txStatus === 'VERIFIED'
+            ? 'VERIFIED'
+            : txStatus === 'APPROVED'
+              ? 'APPROVED'
+              : txStatus === 'AWAITING_EVIDENCE'
+                ? 'AWAITING EVIDENCE'
+                : 'TRANSACTION IN PROGRESS'
+  ) : null
+  const bannerMessage = pending && txStatus ? (
+    txStatus === 'PENDING_REVIEW' || txStatus === 'PENDING'
+      ? 'PENDING TRANSACTION — NOT AVAILABLE FOR ANOTHER SALE.'
+      : txStatus === 'UNDER_REVIEW'
+        ? 'UNDER REVIEW — OWNERSHIP TRANSFER NOT YET CONFIRMED.'
+        : txStatus === 'FLAGGED'
+          ? 'FLAGGED — FURTHER INVESTIGATION REQUIRED. The parcel is restricted.'
+          : txStatus === 'VERIFIED'
+            ? 'VERIFIED — OWNERSHIP TRANSFER PENDING CONFIRMATION. The parcel remains unavailable until completion is confirmed.'
+            : txStatus === 'APPROVED'
+              ? 'APPROVED — OWNERSHIP TRANSFER PENDING FINAL CONFIRMATION. The parcel remains unavailable until completion is confirmed.'
+              : txStatus === 'AWAITING_EVIDENCE'
+                ? 'AWAITING EVIDENCE — OWNERSHIP TRANSFER NOT YET CONFIRMED. The parcel is not available for another sale.'
+                : 'TRANSACTION IN PROGRESS — NOT AVAILABLE FOR ANOTHER SALE.'
+  ) : null
+
   return (
     <div className="login-screen">
       <div className="login-card" style={{ maxWidth: '520px' }}>
@@ -68,7 +102,7 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
 
         {result && (
           <div style={{ marginTop: '24px', textAlign: 'left' }}>
-            <div className="detail-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="detail-grid">
               <div className="detail-card">
                 <span>UPI</span>
                 <strong>{result.upi}</strong>
@@ -85,6 +119,30 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
                 <span>District</span>
                 <strong>{result.district}</strong>
               </div>
+              <div className="detail-card">
+                <span>Ownership Status</span>
+                <strong>{result.status}</strong>
+              </div>
+              <div className="detail-card">
+                <span>Availability</span>
+                <strong>{availability}</strong>
+              </div>
+              <div className="detail-card">
+                <span>Registered Owner</span>
+                <strong>{result.registered_owner_name || 'Owner information unavailable'}</strong>
+              </div>
+              {result.transaction_status && (
+                <div className="detail-card">
+                  <span>Transaction Status</span>
+                  <strong>{result.transaction_status}</strong>
+                </div>
+              )}
+              {result.transaction_code && (
+                <div className="detail-card">
+                  <span>Transaction Reference</span>
+                  <strong>{result.transaction_code}</strong>
+                </div>
+              )}
             </div>
 
             <div style={{ marginTop: '16px', padding: '14px', borderRadius: '8px', background: result.has_pending_transaction ? '#2a1a1a' : '#1a2a1a', border: `1px solid ${result.has_pending_transaction ? '#5a2a2a' : '#2a5a2a'}` }}>
@@ -95,11 +153,19 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
                   <CheckCircle size={18} style={{ color: '#4ade80' }} />
                 )}
                 <strong style={{ color: result.has_pending_transaction ? '#f87171' : '#4ade80' }}>
-                  {result.has_pending_transaction ? 'Pending Transaction Detected' : 'No Pending Transactions'}
+                  {result.has_pending_transaction ? (bannerTitle ?? 'Transaction Pending') : 'No Pending Transactions'}
                 </strong>
               </div>
-              <p style={{ margin: 0, fontSize: '13px', color: '#c5c5c5' }}>
+              {result.has_pending_transaction && bannerMessage && (
+                <p style={{ margin: 0, fontSize: '13px', color: '#c5c5c5' }}>
+                  {bannerMessage}
+                </p>
+              )}
+              <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#c5c5c5' }}>
                 Parcel Status: <strong>{result.status}</strong>
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#c5c5c5' }}>
+                Availability: <strong>{availability}</strong>
               </p>
             </div>
 
