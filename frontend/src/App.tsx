@@ -51,7 +51,7 @@ const navigation = [
 
 const roleNavigation: Record<string, string[]> = {
   ADMIN: ['Dashboard', 'Transaction Review', 'Parcels', 'User Management', 'System Settings', 'Transactions', 'Verification', 'Audit Logs', 'Notifications', 'Reports', 'Profile'],
-  OFFICER: ['Dashboard', 'Parcels', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Profile'],
+  OFFICER: ['Dashboard', 'Parcels', 'Search Parcel', 'Transactions', 'Evidence', 'Verification', 'Pending Reviews', 'Notifications', 'Profile'],
   AUDITOR: ['Dashboard', 'Transaction Review', 'Parcels', 'Transactions Overview', 'Evidence Review', 'Verification', 'Audit Logs', 'Profile'],
 }
 
@@ -101,7 +101,11 @@ export default function App() {
 
   const refreshNotifications = async () => {
     try {
-      const [items, unread] = await Promise.all([api.notifications(), api.unreadNotificationCount()])
+      const isAdminUser = (currentUser?.roles[0] ?? 'OFFICER') === 'ADMIN'
+      const [items, unread] = await Promise.all([
+        isAdminUser ? api.notifications() : api.myNotifications(),
+        isAdminUser ? api.unreadNotificationCount() : api.myUnreadNotificationCount(),
+      ])
       setNotifications(items || [])
       setUnreadCount(unread?.unread_count ?? 0)
     } catch { /* The notification views surface their own error states. */ }
@@ -109,11 +113,17 @@ export default function App() {
 
   const markNotificationRead = async (id: number) => {
     try {
-      const updated = await api.markNotificationRead(id)
+      const updated = await (currentUser?.roles[0] === 'ADMIN' ? api.markNotificationRead(id) : api.markMyNotificationRead(id))
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true, read_at: updated?.read_at ?? new Date().toISOString() } : n)))
       setUnreadCount((count) => Math.max(0, count - (updated?.is_read === false ? 1 : 0)))
     } catch { /* ignore */ }
   }
+
+  useEffect(() => {
+    if (!showNotifications) return
+    const notificationTimer = window.setInterval(() => { void refreshNotifications() }, 30000)
+    return () => window.clearInterval(notificationTimer)
+  }, [showNotifications])
 
   if (!authenticated) {
     if (showPublicCheck) return <PublicUpiCheck onBack={() => setShowPublicCheck(false)} />
@@ -167,7 +177,7 @@ export default function App() {
               <div className="top-avatar">{currentUser ? initials(currentUser.full_name) : 'OF'}</div>
               <span>{currentUser?.full_name ?? 'Officer User'}</span><ChevronDown size={15} />
             </button>
-            {showNotifications && role === 'ADMIN' ? (
+            {showNotifications && !!currentUser ? (
               <div className="notif-dropdown">
                 <div className="notif-dropdown__head">
                   <strong>Notifications</strong>
@@ -196,7 +206,7 @@ export default function App() {
             onNewTransaction={() => { setActiveNav('Transactions'); setOpenCreateModal(true) }}
           />}
           {activeNav === 'Transaction Review' && <TransactionReviewCenter currentUser={currentUser} initialTxId={reviewTxId} />}
-          {activeNav === 'Notifications' && <NotificationsPage currentUserId={currentUser?.id} onOpenTransaction={(txId) => { setReviewTxId(txId); setActiveNav('Transaction Review') }} />}
+          {activeNav === 'Notifications' && <NotificationsPage currentUserId={currentUser?.id} isAdmin={role === 'ADMIN'} onOpenTransaction={(txId) => { setReviewTxId(txId); setActiveNav('Transaction Review') }} />}
           {activeNav === 'User Management' && <UserManagementPage />}
           {activeNav === 'System Settings' && <SystemSettingsPage />}
           {activeNav === 'Parcels' && <ParcelsPage canCreate={role !== 'AUDITOR'} />}

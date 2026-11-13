@@ -4,6 +4,7 @@ import { api, type NotificationRecord } from '../lib/api'
 
 interface Props {
   currentUserId?: number | null
+  isAdmin?: boolean
   onOpenTransaction?: (transactionId: number) => void
 }
 
@@ -28,7 +29,7 @@ const EVENT_LABELS: Record<string, string> = {
   TRANSACTION_EVIDENCE_UPLOADED: 'Evidence uploaded',
 }
 
-export default function NotificationsPage({ currentUserId, onOpenTransaction }: Props) {
+export default function NotificationsPage({ currentUserId, isAdmin = false, onOpenTransaction }: Props) {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -44,13 +45,13 @@ export default function NotificationsPage({ currentUserId, onOpenTransaction }: 
     setError('')
     try {
       const [items, unread] = await Promise.all([
-        api.notifications({
+        (isAdmin ? api.notifications : api.myNotifications)({
           event_type: eventType || undefined,
           priority: priority || undefined,
           is_read: readFilter === 'all' ? undefined : readFilter === 'read',
           q: query.trim() || undefined,
         }),
-        api.unreadNotificationCount(),
+        isAdmin ? api.unreadNotificationCount() : api.myUnreadNotificationCount(),
       ])
       setNotifications(items || [])
       setUnreadCount(unread?.unread_count ?? 0)
@@ -59,7 +60,7 @@ export default function NotificationsPage({ currentUserId, onOpenTransaction }: 
     } finally {
       setLoading(false)
     }
-  }, [eventType, priority, readFilter, query])
+  }, [eventType, priority, readFilter, query, isAdmin])
 
   useEffect(() => {
     void loadNotifications()
@@ -67,7 +68,7 @@ export default function NotificationsPage({ currentUserId, onOpenTransaction }: 
 
   const markRead = async (id: number) => {
     try {
-      const updated = await api.markNotificationRead(id)
+      const updated = await (isAdmin ? api.markNotificationRead : api.markMyNotificationRead)(id)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true, read_at: updated?.read_at ?? new Date().toISOString() } : n)))
       setUnreadCount((count) => Math.max(0, count - (updated?.is_read === false ? 1 : 0)))
     } catch (err) {
@@ -78,7 +79,7 @@ export default function NotificationsPage({ currentUserId, onOpenTransaction }: 
   const markAllRead = async () => {
     setMarkingAll(true)
     try {
-      const result = await api.markAllNotificationsRead()
+      const result = await (isAdmin ? api.markAllNotificationsRead : api.markMyNotificationsRead)()
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true, read_at: n.read_at ?? new Date().toISOString() })))
       setUnreadCount(result?.unread_count ?? 0)
     } catch (err) {
@@ -129,7 +130,7 @@ export default function NotificationsPage({ currentUserId, onOpenTransaction }: 
             </button>
           </div>
         </div>
-        <p className="card-sub">Administrative alerts and security notifications generated from live system events.</p>
+        <p className="card-sub">{isAdmin ? 'Administrative alerts and security notifications generated from live system events.' : 'Notifications concerning your transactions, ownership and account activity.'}</p>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
           <div style={{ position: 'relative', flex: '1 1 220px' }}>

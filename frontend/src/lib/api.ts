@@ -107,6 +107,18 @@ export const api = {
   unreadNotificationCount: () => request<{ unread_count: number }>('/api/notifications/unread-count'),
   markNotificationRead: (id: number) => request<NotificationRecord>(`/api/notifications/${id}/read`, { method: 'POST' }),
   markAllNotificationsRead: () => request<{ unread_count: number; updated: number }>('/api/notifications/mark-all-read', { method: 'POST' }),
+  myNotifications: (query: { event_type?: string; priority?: string; is_read?: boolean; q?: string } = {}) => {
+    const params = new URLSearchParams()
+    if (query.event_type) params.set('event_type', query.event_type)
+    if (query.priority) params.set('priority', query.priority)
+    if (query.is_read !== undefined) params.set('is_read', String(query.is_read))
+    if (query.q) params.set('q', query.q)
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    return request<NotificationRecord[]>(`/api/notifications/me${suffix}`)
+  },
+  myUnreadNotificationCount: () => request<{ unread_count: number }>('/api/notifications/me/unread-count'),
+  markMyNotificationRead: (id: number) => request<NotificationRecord>(`/api/notifications/me/${id}/read`, { method: 'POST' }),
+  markMyNotificationsRead: () => request<{ unread_count: number; updated: number }>('/api/notifications/me/read-all', { method: 'POST' }),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
   evidenceForTransaction: (transactionId: number) => request<EvidenceOut[]>(`/api/evidence/transactions/${transactionId}`),
