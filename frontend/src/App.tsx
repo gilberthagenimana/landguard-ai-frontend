@@ -113,9 +113,10 @@ export default function App() {
 
   const markNotificationRead = async (id: number) => {
     try {
+      const wasUnread = notifications.some((notification) => notification.id === id && !notification.is_read)
       const updated = await (currentUser?.roles[0] === 'ADMIN' ? api.markNotificationRead(id) : api.markMyNotificationRead(id))
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true, read_at: updated?.read_at ?? new Date().toISOString() } : n)))
-      setUnreadCount((count) => Math.max(0, count - (updated?.is_read === false ? 1 : 0)))
+      if (wasUnread) setUnreadCount((count) => Math.max(0, count - 1))
     } catch { /* ignore */ }
   }
 
@@ -406,7 +407,7 @@ function SearchParcelPage() {
             <div className="card-header"><h3><MapPin size={18} /> Parcel Information</h3><span className="badge badge--success">{parcel.status}</span></div>
             <div className="parcel-information-grid">
               <div className="info-list">
-                <div className="info-row"><span className="info-label">UPI</span><span className="info-value"><strong>{parcel.upi}</strong></span></div><div className="info-row"><span className="info-label">Parcel Code</span><span className="info-value">{parcel.parcel_code}</span></div><div className="info-row"><span className="info-label">Province</span><span className="info-value">{parcel.province || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">District</span><span className="info-value">{parcel.district || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Sector / Cell</span><span className="info-value">{[parcel.sector, parcel.cell].filter(Boolean).join(' / ') || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Area</span><span className="info-value">{typeof parcel.area_ha === 'number' ? `${parcel.area_ha} ha` : 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Owner</span><span className="info-value">{parcel.current_owner_name || 'Unavailable'}</span></div>
+                <div className="info-row"><span className="info-label">UPI</span><span className="info-value"><strong>{parcel.upi || 'UPI unavailable'}</strong></span></div><div className="info-row"><span className="info-label">Parcel Code</span><span className="info-value">{parcel.parcel_code}</span></div><div className="info-row"><span className="info-label">Province</span><span className="info-value">{parcel.province || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">District</span><span className="info-value">{parcel.district || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Sector / Cell</span><span className="info-value">{[parcel.sector, parcel.cell].filter(Boolean).join(' / ') || 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Area</span><span className="info-value">{typeof parcel.area_ha === 'number' ? `${parcel.area_ha} ha` : 'Unavailable'}</span></div><div className="info-row"><span className="info-label">Recorded Owner</span><span className="info-value">{parcel.current_owner_name || 'Unavailable'}</span></div>
               </div>
               <div><ParcelMap location={{ verificationStatus: parcel.location_verification_status, latitude: parcel.latitude, longitude: parcel.longitude, geometry: parcel.boundary_geometry, upi: parcel.upi, parcelCode: parcel.parcel_code, address: [parcel.cell, parcel.sector, parcel.district, parcel.province, 'Rwanda'].filter(Boolean).join(', '), district: parcel.district, sector: parcel.sector, cell: parcel.cell }} /></div>
             </div>
@@ -439,7 +440,7 @@ function SearchParcelPage() {
 /* =========================================================================
    NEW TRANSACTION MODAL
    ========================================================================= */
-type ParcelSelection = { id: number; upi: string; parcel_code: string; owner_id?: number | null; owner_name?: string | null; location: string; status: string }
+type ParcelSelection = { id: number; upi: string | null; parcel_code: string; owner_id?: number | null; owner_name?: string | null; location: string; status: string }
 type OwnerSelection = { id: number; name: string; code: string; identification_number?: string | null }
 
 function NewTransactionModal({
@@ -467,9 +468,13 @@ function NewTransactionModal({
     api.parcels({ page: 1, page_size: 100 }).then((response) => {
       const rows = Array.isArray(response) ? response : response.items
       setParcels(rows.map(p => ({
-      id: p.id, upi: p.upi || p.parcel_code || `UPI-${p.id}`, parcel_code: p.parcel_code || `RW-${p.id}`,
-      owner_id: p.current_owner_id, owner_name: p.current_owner_name,
-      location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location, status: p.status,
+        id: p.id,
+        upi: p.upi ?? null,
+        parcel_code: p.parcel_code || `RW-${p.id}`,
+        owner_id: p.current_owner_id,
+        owner_name: p.current_owner_name,
+        location: `${p.district || ''} / ${p.sector || ''}`.trim() || p.location,
+        status: p.status,
       })))
     }).catch((err) => setError(err instanceof Error ? err.message : 'Unable to load parcels.'))
   }, [])
@@ -562,7 +567,7 @@ function NewTransactionModal({
               <option value="">Select a parcel</option>
               {parcels.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.upi} — {p.location}
+                  {p.upi || 'UPI unavailable'} — {p.parcel_code} — {p.location}
                 </option>
               ))}
             </select>
@@ -700,8 +705,12 @@ function TransactionDetailModal({
             </span>
           </div>
           <div className="detail-card">
-            <span>Parcel Code / UPI</span>
-            <strong>{tx.parcel_code || `UPI-${tx.parcel_id}`}</strong>
+            <span>UPI</span>
+            <strong>{tx.upi || 'UPI unavailable'}</strong>
+          </div>
+          <div className="detail-card">
+            <span>Parcel Code</span>
+            <strong>{tx.parcel_code || `Parcel #${tx.parcel_id}`}</strong>
           </div>
           <div className="detail-card">
             <span>Transaction Type</span>
@@ -1025,11 +1034,12 @@ function TransactionsPage({
     const q = appliedSearch.trim().toLowerCase()
     if (q) {
       const matchCode = (tx.transaction_code || '').toLowerCase().includes(q)
-      const matchUpi = (tx.parcel_code || '').toLowerCase().includes(q)
+      const matchUpi = (tx.upi || '').toLowerCase().includes(q)
+      const matchParcelCode = (tx.parcel_code || '').toLowerCase().includes(q)
       const matchSeller = (tx.seller_name || '').toLowerCase().includes(q)
       const matchBuyer = (tx.buyer_name || '').toLowerCase().includes(q)
       const matchId = String(tx.id).includes(q)
-      if (!matchCode && !matchUpi && !matchSeller && !matchBuyer && !matchId) return false
+      if (!matchCode && !matchUpi && !matchParcelCode && !matchSeller && !matchBuyer && !matchId) return false
     }
 
     // Date range
@@ -1119,6 +1129,7 @@ function TransactionsPage({
               <tr>
                 <th>ID</th>
                 <th>Parcel UPI</th>
+                <th>Parcel Code</th>
                 <th>Seller</th>
                 <th>Buyer</th>
                 <th>Amount (RWF)</th>
@@ -1130,7 +1141,7 @@ function TransactionsPage({
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
                     {transactions.length === 0 ? 'No transactions found. Create a transaction to begin verification.' : 'No transactions match the selected filters.'}
                   </td>
                 </tr>
@@ -1138,7 +1149,8 @@ function TransactionsPage({
                 paginated.map((tx) => (
                   <tr key={tx.id} style={{ cursor: 'pointer' }} onClick={() => setViewTx(tx)}>
                     <td><strong>{tx.transaction_code || `TX-${String(tx.id).padStart(3, '0')}`}</strong></td>
-                    <td>{tx.parcel_code || `UPI-${String(tx.parcel_id).padStart(3, '0')}`}</td>
+                    <td>{tx.upi || 'UPI unavailable'}</td>
+                    <td>{tx.parcel_code || `Parcel #${tx.parcel_id}`}</td>
                     <td>{tx.seller_name || 'N/A'}</td>
                     <td>{tx.buyer_name || 'N/A'}</td>
                     <td>{Number(tx.declared_value || 0).toLocaleString()}</td>
@@ -1352,7 +1364,8 @@ function PendingReviewsPage() {
       key: c.case_code || `CASE-${c.id}`,
       caseId: c.id,
       transactionId: c.transaction_id,
-      upi: c.parcel_code || tx?.parcel_code || 'N/A',
+      upi: tx?.upi || null,
+      parcelCode: c.parcel_code || tx?.parcel_code || (tx ? `Parcel #${tx.parcel_id}` : 'Parcel unavailable'),
       seller: tx?.seller_name || 'N/A',
       buyer: tx?.buyer_name || 'N/A',
       reason: c.review_notes || (c.risk_level ? `AI risk level: ${c.risk_level}` : 'Awaiting review'),
@@ -1419,7 +1432,12 @@ function PendingReviewsPage() {
         <p className="text-muted">Loading pending reviews...</p>
       ) : (
         <>
-      <div className="filter-tabs"><button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All ({tabCounts.all})</button><button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk ({tabCounts.high})</button><button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence ({tabCounts.missing})</button><button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification ({tabCounts.clarification})</button></div>
+      <div className="filter-tabs">
+        <button className={`filter-tab ${filter === 'all' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('all')}>All ({tabCounts.all})</button>
+        <button className={`filter-tab ${filter === 'high' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('high')}>High Risk ({tabCounts.high})</button>
+        <button className={`filter-tab ${filter === 'missing' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('missing')}>Missing Evidence ({tabCounts.missing})</button>
+        <button className={`filter-tab ${filter === 'clarification' ? 'filter-tab--active' : ''}`} onClick={() => setFilter('clarification')}>Needs Clarification ({tabCounts.clarification})</button>
+      </div>
 
       {reviewCaseId && reviewTarget && (
         <div className="card" style={{ marginBottom: '16px' }}>
@@ -1427,13 +1445,15 @@ function PendingReviewsPage() {
             <h3>{reviewTarget.case_code}</h3>
             <button className="btn-secondary btn-sm" onClick={() => { setReviewCaseId(null); setDecision(null); setReviewReason(''); setReviewError(''); }}>Close</button>
           </div>
-          <p className="text-muted" style={{ marginTop: 0 }}>Transaction {reviewTarget.transaction_id} — evidence and risk context are reviewed before an approval or rejection decision.</p>
+          <p className="text-muted" style={{ marginTop: 0 }}>
+            Transaction {reviewTarget.transaction_id} — evidence and risk context are reviewed before an approval or rejection decision.
+          </p>
           {reviewError && <div className="alert alert--error">{reviewError}</div>}
           {success && <div className="alert alert--success">{success}</div>}
           {decision === null ? (
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn-primary" onClick={() => { setDecision('APPROVED') }}>Approve</button>
-              <button className="btn-secondary" onClick={() => { setDecision('REJECTED') }}>Reject</button>
+              <button className="btn-primary" onClick={() => setDecision('APPROVED')}>Approve</button>
+              <button className="btn-secondary" onClick={() => setDecision('REJECTED')}>Reject</button>
             </div>
           ) : (
             <>
@@ -1449,10 +1469,60 @@ function PendingReviewsPage() {
           )}
         </div>
       )}
-      <div className="table-card"><table className="data-table"><thead><tr><th>ID</th><th>Parcel UPI</th><th>Seller → Buyer</th><th>Reason</th><th>Evidence Status</th><th>Date</th><th>Actions</th></tr></thead>
-        <tbody>{filteredRows.length === 0 ? (<tr><td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>No pending reviews found.</td></tr>) : filteredRows.map((r) => (<tr key={r.key}><td><strong>{r.key}</strong></td><td>{r.upi}</td><td>{r.seller} → {r.buyer}</td><td>{r.reason}</td><td><span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(/_/g, '-')}`}>{r.evidence.replace(/_/g, ' ')}</span></td><td>{r.date}</td><td><button className="btn-secondary btn-sm" onClick={() => openReview(r.caseId)}>Review Details</button></td></tr>))}</tbody></table>
-        <div className="table-footer"><span>Showing {filteredRows.length} of {rows.length}</span><div className="pagination"><button className="page-btn" disabled>&lt;</button><button className="page-btn page-btn--active">1</button><button className="page-btn" disabled>&gt;</button></div></div>
+
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Parcel UPI</th>
+              <th>Parcel Code</th>
+              <th>Seller → Buyer</th>
+              <th>Reason</th>
+              <th>Evidence Status</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                  No pending reviews found.
+                </td>
+              </tr>
+            ) : filteredRows.map((r) => (
+              <tr key={r.key}>
+                <td><strong>{r.key}</strong></td>
+                <td>{r.upi || 'UPI unavailable'}</td>
+                <td>{r.parcelCode}</td>
+                <td>{r.seller} → {r.buyer}</td>
+                <td>{r.reason}</td>
+                <td>
+                  <span className={`evidence-badge evidence-${r.evidence.toLowerCase().replace(/_/g, '-')}`}>
+                    {r.evidence.replace(/_/g, ' ')}
+                  </span>
+                </td>
+                <td>{r.date}</td>
+                <td>
+                  <button className="btn-secondary btn-sm" onClick={() => openReview(r.caseId)}>
+                    Review Details
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="table-footer">
+          <span>Showing {filteredRows.length} of {rows.length}</span>
+          <div className="pagination">
+            <button className="page-btn" disabled>&lt;</button>
+            <button className="page-btn page-btn--active">1</button>
+            <button className="page-btn" disabled>&gt;</button>
+          </div>
         </div>
+      </div>
         </>
       )}
     </div>

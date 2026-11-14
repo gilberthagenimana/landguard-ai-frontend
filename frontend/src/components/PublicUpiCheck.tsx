@@ -9,6 +9,7 @@ import { api, type PublicParcelOut } from '../lib/api'
 
 export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
   const [upi, setUpi] = useState('')
+  const [lookupMode, setLookupMode] = useState<'upi' | 'parcel_code'>('upi')
   const [result, setResult] = useState<PublicParcelOut | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -17,7 +18,7 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!upi.trim()) {
-      setError('Please enter a UPI')
+      setError(lookupMode === 'upi' ? 'Please enter a UPI' : 'Please enter a parcel code')
       return
     }
     setLoading(true)
@@ -25,7 +26,9 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
     setResult(null)
     setSearched(true)
     try {
-      const data = await api.publicParcelCheck(upi.trim())
+      const data = lookupMode === 'upi'
+        ? await api.publicParcelCheck(upi.trim())
+        : await api.publicParcelByCode(upi.trim())
       setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Parcel not found')
@@ -77,15 +80,19 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
         </div>
         <h1>Public Parcel Check</h1>
         <p className="login-subtitle">
-          Check parcel status by UPI (Unique Parcel Identifier)
+          Check parcel status by UPI or parcel code
         </p>
 
         <form onSubmit={submit} className="login-form">
           <label>
-            Enter UPI
+            {lookupMode === 'upi' ? 'Enter UPI' : 'Enter parcel code'}
+            <select value={lookupMode} onChange={(e) => setLookupMode(e.target.value as 'upi' | 'parcel_code')}>
+              <option value="upi">Official UPI</option>
+              <option value="parcel_code">Parcel code</option>
+            </select>
             <input
               type="text"
-              placeholder="e.g. RW-10432"
+              placeholder={lookupMode === 'upi' ? 'e.g. 1/02/03/04/567' : 'e.g. RW-10432'}
               value={upi}
               onChange={(e) => setUpi(e.target.value)}
               required
@@ -105,7 +112,7 @@ export default function PublicUpiCheck({ onBack }: { onBack: () => void }) {
             <div className="detail-grid">
               <div className="detail-card">
                 <span>UPI</span>
-                <strong>{result.upi}</strong>
+                <strong>{result.upi || 'UPI unavailable'}</strong>
               </div>
               <div className="detail-card">
                 <span>Parcel Code</span>

@@ -68,9 +68,10 @@ export default function NotificationsPage({ currentUserId, isAdmin = false, onOp
 
   const markRead = async (id: number) => {
     try {
+      const wasUnread = notifications.some((notification) => notification.id === id && !notification.is_read)
       const updated = await (isAdmin ? api.markNotificationRead : api.markMyNotificationRead)(id)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true, read_at: updated?.read_at ?? new Date().toISOString() } : n)))
-      setUnreadCount((count) => Math.max(0, count - (updated?.is_read === false ? 1 : 0)))
+      if (wasUnread) setUnreadCount((count) => Math.max(0, count - 1))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark notification as read')
     }
