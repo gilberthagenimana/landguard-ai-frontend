@@ -1,173 +1,570 @@
 /**
- * Add Parcel form. Calls the existing POST /api/parcels endpoint
- * (the backend already restricts it to Admin and Officer).
+ * Add Parcel form.
+ * Uses Rwanda's administrative location dataset.
+ * Calls the existing POST /api/parcels endpoint.
  */
-import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
-import { X } from 'lucide-react'
-import { api } from '../lib/api'
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { X } from "lucide-react";
+import { api } from "../lib/api";
+import rwandaLocations from "../data/rwanda-locations.json";
+
+type LocationRecord = {
+  province: string;
+  province_id: string;
+  district: string;
+  district_id: string;
+  sector: string;
+  sector_id: string;
+  cell: string;
+  cell_id: string;
+  village: string;
+  village_id: string;
+};
+
+const locationData = rwandaLocations as LocationRecord[];
 
 const empty = {
-  upi: '', parcel_code: '', location: '', province: '', district: '',
-  sector: '', cell: '', village: '', area_ha: '', registration_reference: '',
-}
+  upi: "",
+  parcel_code: "",
+  location: "",
+  province: "",
+  district: "",
+  sector: "",
+  cell: "",
+  village: "",
+  area_ha: "",
+  registration_reference: "",
+};
 
 const emptyOwner = {
-  owner_type: 'INDIVIDUAL' as 'INDIVIDUAL' | 'ORGANIZATION',
-  full_name: '', identification_number: '', phone: '', email: '',
-  organization_name: '', registration_number: '',
-}
+  owner_type: "INDIVIDUAL" as "INDIVIDUAL" | "ORGANIZATION",
+  full_name: "",
+  identification_number: "",
+  phone: "",
+  email: "",
+  organization_name: "",
+  registration_number: "",
+};
 
-const fields: { key: keyof typeof empty; label: string; required?: boolean; type?: string; hint?: string }[] = [
-  { key: 'upi', label: 'UPI', required: true, hint: 'Unique parcel identifier, for example 1/02/03/04/567' },
-  { key: 'parcel_code', label: 'Parcel code', required: true },
-  { key: 'location', label: 'Location description', required: true },
-  { key: 'province', label: 'Province', required: true },
-  { key: 'district', label: 'District', required: true },
-  { key: 'sector', label: 'Sector', required: true },
-  { key: 'cell', label: 'Cell', required: true },
-  { key: 'village', label: 'Village', required: true },
-  { key: 'area_ha', label: 'Area (hectares)', required: true, type: 'number' },
-  { key: 'registration_reference', label: 'Registration reference (optional)' },
-]
+const fields: {
+  key: keyof typeof empty;
+  label: string;
+  required?: boolean;
+  type?: string;
+  hint?: string;
+}[] = [
+  {
+    key: "upi",
+    label: "UPI",
+    required: true,
+    hint: "Unique parcel identifier, for example 1/02/03/04/567",
+  },
+  { key: "parcel_code", label: "Parcel code", required: true },
+  { key: "location", label: "Location description", required: true },
+  { key: "area_ha", label: "Area (hectares)", required: true, type: "number" },
+  { key: "registration_reference", label: "Registration reference (optional)" },
+];
 
-export default function AddParcelModal({ onClose, onCreated }: { onClose: () => void; onCreated?: () => void }) {
-  const [form, setForm] = useState(empty)
-  const [owner, setOwner] = useState(emptyOwner)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [created, setCreated] = useState('')
+const uniqueSorted = (values: string[]) =>
+  [...new Set(values)].sort((a, b) => a.localeCompare(b));
+
+export default function AddParcelModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated?: () => void;
+}) {
+  const [form, setForm] = useState(empty);
+  const [owner, setOwner] = useState(emptyOwner);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState("");
+
+  // Province options
+  const provinces = useMemo(
+    () => uniqueSorted(locationData.map((item) => item.province)),
+    [],
+  );
+
+  // District options depend on province
+  const districts = useMemo(
+    () =>
+      uniqueSorted(
+        locationData
+          .filter((item) => item.province === form.province)
+          .map((item) => item.district),
+      ),
+    [form.province],
+  );
+
+  // Sector options depend on province and district
+  const sectors = useMemo(
+    () =>
+      uniqueSorted(
+        locationData
+          .filter(
+            (item) =>
+              item.province === form.province &&
+              item.district === form.district,
+          )
+          .map((item) => item.sector),
+      ),
+    [form.province, form.district],
+  );
+
+  // Cell options depend on the selected sector
+  const cells = useMemo(
+    () =>
+      uniqueSorted(
+        locationData
+          .filter(
+            (item) =>
+              item.province === form.province &&
+              item.district === form.district &&
+              item.sector === form.sector,
+          )
+          .map((item) => item.cell),
+      ),
+    [form.province, form.district, form.sector],
+  );
+
+  // Village options depend on the selected cell
+  const villages = useMemo(
+    () =>
+      uniqueSorted(
+        locationData
+          .filter(
+            (item) =>
+              item.province === form.province &&
+              item.district === form.district &&
+              item.sector === form.sector &&
+              item.cell === form.cell,
+          )
+          .map((item) => item.village),
+      ),
+    [form.province, form.district, form.sector, form.cell],
+  );
+
+  // Clear dependent fields when a parent location changes
+  const updateLocation = (
+    field: "province" | "district" | "sector" | "cell" | "village",
+    value: string,
+  ) => {
+    setForm((previous) => {
+      const next = { ...previous, [field]: value };
+
+      if (field === "province") {
+        next.district = "";
+        next.sector = "";
+        next.cell = "";
+        next.village = "";
+      }
+
+      if (field === "district") {
+        next.sector = "";
+        next.cell = "";
+        next.village = "";
+      }
+
+      if (field === "sector") {
+        next.cell = "";
+        next.village = "";
+      }
+
+      if (field === "cell") {
+        next.village = "";
+      }
+
+      return next;
+    });
+  };
+
+  const locationFields = [
+    { key: "province", label: "Province", options: provinces },
+    { key: "district", label: "District", options: districts },
+    { key: "sector", label: "Sector", options: sectors },
+    { key: "cell", label: "Cell", options: cells },
+    { key: "village", label: "Village", options: villages },
+  ] as const;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const submit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError('')
-    const area = Number(form.area_ha)
-    if (!(area > 0)) { setError('Enter an area greater than 0 hectares.'); return }
-    setSubmitting(true)
+    e.preventDefault();
+    setError("");
+
+    // Verify the complete administrative location
+    const validLocation = locationData.some(
+      (item) =>
+        item.province === form.province &&
+        item.district === form.district &&
+        item.sector === form.sector &&
+        item.cell === form.cell &&
+        item.village === form.village,
+    );
+
+    if (!validLocation) {
+      setError(
+        "Please select a valid Province, District, Sector, Cell and Village from the Rwanda location suggestions.",
+      );
+      return;
+    }
+
+    const area = Number(form.area_ha);
+
+    if (!(area > 0)) {
+      setError("Enter an area greater than 0 hectares.");
+      return;
+    }
+
+    setSubmitting(true);
+
     try {
       const parcel = await api.createParcel({
         upi: form.upi.trim(),
         parcel_code: form.parcel_code.trim(),
         location: form.location.trim(),
-        province: form.province.trim(),
-        district: form.district.trim(),
-        sector: form.sector.trim(),
-        cell: form.cell.trim(),
-        village: form.village.trim(),
+        province: form.province,
+        district: form.district,
+        sector: form.sector,
+        cell: form.cell,
+        village: form.village,
         area_ha: area,
-        ...(form.registration_reference.trim() ? { registration_reference: form.registration_reference.trim() } : {}),
+        ...(form.registration_reference.trim()
+          ? {
+              registration_reference: form.registration_reference.trim(),
+            }
+          : {}),
         owner: {
           owner_type: owner.owner_type,
           full_name: owner.full_name.trim(),
           identification_number: owner.identification_number.trim(),
           ...(owner.phone.trim() ? { phone: owner.phone.trim() } : {}),
           ...(owner.email.trim() ? { email: owner.email.trim() } : {}),
-          ...(owner.owner_type === 'ORGANIZATION' ? {
-            organization_name: owner.organization_name.trim(),
-            registration_number: owner.registration_number.trim(),
-          } : {}),
+          ...(owner.owner_type === "ORGANIZATION"
+            ? {
+                organization_name: owner.organization_name.trim(),
+                registration_number: owner.registration_number.trim(),
+              }
+            : {}),
         },
-      })
-      setCreated(parcel.parcel_code)
-      onCreated?.()
+      });
+
+      setCreated(parcel.parcel_code);
+      onCreated?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The parcel could not be saved. Check the details and try again.')
+      setError(
+        err instanceof Error
+          ? err.message
+          : "The parcel could not be saved. Check the details and try again.",
+      );
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-window" role="dialog" aria-modal="true" aria-labelledby="add-parcel-title" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-window"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-parcel-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div>
             <h2 id="add-parcel-title">Add parcel</h2>
             <p>Register a new land parcel in the cadastre.</p>
           </div>
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button>
+
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {created ? (
           <>
-            <p className="lg-form-ok" role="status">Parcel {created} was added.</p>
-            <div className="modal-actions"><button type="button" className="btn-primary btn-sm" onClick={onClose}>Done</button></div>
+            <p className="lg-form-ok" role="status">
+              Parcel {created} was added.
+            </p>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={onClose}
+              >
+                Done
+              </button>
+            </div>
           </>
         ) : (
           <form onSubmit={submit}>
-            {error && <p className="lg-form-error" role="alert">{error}</p>}
-            {fields.map((f) => (
-              <div className="form-group" key={f.key}>
-                <label className="form-label" htmlFor={`parcel-${f.key}`}>{f.label}</label>
+            {error && (
+              <p className="lg-form-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            {/* General parcel information */}
+            {fields.map((field) => (
+              <div className="form-group" key={field.key}>
+                <label className="form-label" htmlFor={`parcel-${field.key}`}>
+                  {field.label}
+                </label>
+
                 <input
-                  id={`parcel-${f.key}`}
+                  id={`parcel-${field.key}`}
                   className="form-input"
-                  type={f.type ?? 'text'}
-                  step={f.type === 'number' ? 'any' : undefined}
-                  min={f.type === 'number' ? 0 : undefined}
-                  required={f.required}
-                  value={form[f.key]}
-                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  type={field.type ?? "text"}
+                  step={field.type === "number" ? "any" : undefined}
+                  min={field.type === "number" ? 0 : undefined}
+                  required={field.required}
+                  value={form[field.key]}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      [field.key]: e.target.value,
+                    })
+                  }
                 />
-                {f.hint && <div className="form-hint">{f.hint}</div>}
+
+                {field.hint && <div className="form-hint">{field.hint}</div>}
               </div>
             ))}
+
+            {/* Rwanda administrative location */}
+            <fieldset className="form-section">
+              <legend>Administrative Location</legend>
+
+              <p className="form-hint">
+                Search and select the correct administrative area. Each
+                selection filters the next level.
+              </p>
+
+              {locationFields.map((field, index) => {
+                const previousField =
+                  index > 0 ? locationFields[index - 1] : null;
+
+                const disabled =
+                  previousField !== null && !form[previousField.key];
+
+                const listId = `parcel-${field.key}-options`;
+
+                return (
+                  <div className="form-group" key={field.key}>
+                    <label
+                      className="form-label"
+                      htmlFor={`parcel-${field.key}`}
+                    >
+                      {field.label}
+                    </label>
+
+                    <input
+                      id={`parcel-${field.key}`}
+                      className="form-input"
+                      type="text"
+                      list={listId}
+                      required
+                      disabled={disabled}
+                      autoComplete="off"
+                      placeholder={
+                        disabled
+                          ? `Select ${previousField?.label} first`
+                          : `Search ${field.label.toLowerCase()}...`
+                      }
+                      value={form[field.key]}
+                      onChange={(e) =>
+                        updateLocation(field.key, e.target.value)
+                      }
+                    />
+
+                    <datalist id={listId}>
+                      {field.options.map((option) => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  </div>
+                );
+              })}
+            </fieldset>
+
+            {/* Parcel owner information */}
             <fieldset className="form-section">
               <legend>Parcel Owner Information</legend>
+
               <div className="form-group">
-                <label className="form-label" htmlFor="parcel-owner-type">Owner type</label>
+                <label className="form-label" htmlFor="parcel-owner-type">
+                  Owner type
+                </label>
+
                 <select
                   id="parcel-owner-type"
                   className="form-input"
                   value={owner.owner_type}
-                  onChange={(e) => setOwner({ ...owner, owner_type: e.target.value as typeof owner.owner_type })}
+                  onChange={(e) =>
+                    setOwner({
+                      ...owner,
+                      owner_type: e.target.value as typeof owner.owner_type,
+                    })
+                  }
                 >
                   <option value="INDIVIDUAL">Individual</option>
                   <option value="ORGANIZATION">Organization</option>
                 </select>
               </div>
+
               <div className="form-group">
-                <label className="form-label" htmlFor="parcel-owner-name">Owner full name</label>
-                <input id="parcel-owner-name" className="form-input" required value={owner.full_name} onChange={(e) => setOwner({ ...owner, full_name: e.target.value })} />
+                <label className="form-label" htmlFor="parcel-owner-name">
+                  Owner full name
+                </label>
+
+                <input
+                  id="parcel-owner-name"
+                  className="form-input"
+                  required
+                  value={owner.full_name}
+                  onChange={(e) =>
+                    setOwner({ ...owner, full_name: e.target.value })
+                  }
+                />
               </div>
+
               <div className="form-group">
-                <label className="form-label" htmlFor="parcel-owner-id">National ID number</label>
-                <input id="parcel-owner-id" className="form-input" required value={owner.identification_number} onChange={(e) => setOwner({ ...owner, identification_number: e.target.value })} />
+                <label className="form-label" htmlFor="parcel-owner-id">
+                  National ID number
+                </label>
+
+                <input
+                  id="parcel-owner-id"
+                  className="form-input"
+                  required
+                  value={owner.identification_number}
+                  onChange={(e) =>
+                    setOwner({
+                      ...owner,
+                      identification_number: e.target.value,
+                    })
+                  }
+                />
               </div>
+
               <div className="form-group">
-                <label className="form-label" htmlFor="parcel-owner-phone">Phone number (optional)</label>
-                <input id="parcel-owner-phone" className="form-input" type="tel" value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} />
+                <label className="form-label" htmlFor="parcel-owner-phone">
+                  Phone number (optional)
+                </label>
+
+                <input
+                  id="parcel-owner-phone"
+                  className="form-input"
+                  type="tel"
+                  value={owner.phone}
+                  onChange={(e) =>
+                    setOwner({ ...owner, phone: e.target.value })
+                  }
+                />
               </div>
+
               <div className="form-group">
-                <label className="form-label" htmlFor="parcel-owner-email">Email address (optional)</label>
-                <input id="parcel-owner-email" className="form-input" type="email" value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} />
+                <label className="form-label" htmlFor="parcel-owner-email">
+                  Email address (optional)
+                </label>
+
+                <input
+                  id="parcel-owner-email"
+                  className="form-input"
+                  type="email"
+                  value={owner.email}
+                  onChange={(e) =>
+                    setOwner({ ...owner, email: e.target.value })
+                  }
+                />
               </div>
-              {owner.owner_type === 'ORGANIZATION' && (
+
+              {owner.owner_type === "ORGANIZATION" && (
                 <>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="parcel-organization-name">Organization name</label>
-                    <input id="parcel-organization-name" className="form-input" required value={owner.organization_name} onChange={(e) => setOwner({ ...owner, organization_name: e.target.value })} />
+                    <label
+                      className="form-label"
+                      htmlFor="parcel-organization-name"
+                    >
+                      Organization name
+                    </label>
+
+                    <input
+                      id="parcel-organization-name"
+                      className="form-input"
+                      required
+                      value={owner.organization_name}
+                      onChange={(e) =>
+                        setOwner({
+                          ...owner,
+                          organization_name: e.target.value,
+                        })
+                      }
+                    />
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label" htmlFor="parcel-registration-number">Organization registration number</label>
-                    <input id="parcel-registration-number" className="form-input" required value={owner.registration_number} onChange={(e) => setOwner({ ...owner, registration_number: e.target.value })} />
+                    <label
+                      className="form-label"
+                      htmlFor="parcel-registration-number"
+                    >
+                      Organization registration number
+                    </label>
+
+                    <input
+                      id="parcel-registration-number"
+                      className="form-input"
+                      required
+                      value={owner.registration_number}
+                      onChange={(e) =>
+                        setOwner({
+                          ...owner,
+                          registration_number: e.target.value,
+                        })
+                      }
+                    />
                   </div>
                 </>
               )}
             </fieldset>
+
             <div className="modal-actions">
-              <button type="button" className="btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn-primary btn-sm" disabled={submitting}>{submitting ? 'Saving…' : 'Add parcel'}</button>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="btn-primary btn-sm"
+                disabled={submitting}
+              >
+                {submitting ? "Saving…" : "Add parcel"}
+              </button>
             </div>
           </form>
         )}
       </div>
     </div>
-  )
+  );
 }
