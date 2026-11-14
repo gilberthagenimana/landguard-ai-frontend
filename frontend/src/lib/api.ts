@@ -121,6 +121,7 @@ export const api = {
   markMyNotificationsRead: () => request<{ unread_count: number; updated: number }>('/api/notifications/me/read-all', { method: 'POST' }),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
+  publicParcelByCode: (parcelCode: string) => request<PublicParcelOut>(`/api/public/parcels/by-code/${encodeURIComponent(parcelCode)}`),
   evidenceForTransaction: (transactionId: number) => request<EvidenceOut[]>(`/api/evidence/transactions/${transactionId}`),
   uploadEvidence: (transactionId: number, file: File, documentType: string, metadata: { statedPaymentAmount?: string; paymentReference?: string; notes?: string }) => {
     const formData = new FormData()
@@ -243,7 +244,7 @@ export type DatabaseHealth = { status: string; service: string; database: string
 export type ParcelRecord = {
   id: number
   parcel_code: string
-  upi?: string
+  upi?: string | null
   location: string
   province: string
   district: string
@@ -316,6 +317,7 @@ export type TransactionRecord = {
   transaction_code: string
   parcel_id: number
   parcel_code?: string | null
+  upi?: string | null
   seller_name?: string | null
   buyer_name?: string | null
   seller_owner_id?: number | null
@@ -364,7 +366,7 @@ export type AuditRecord = {
 }
 
 export type PublicParcelOut = {
-  upi: string
+  upi: string | null
   parcel_code: string
   location: string
   district: string

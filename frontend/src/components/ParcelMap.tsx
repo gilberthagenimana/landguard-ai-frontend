@@ -7,7 +7,7 @@ export type ParcelMapLocation = {
   latitude?: number | null
   longitude?: number | null
   geometry?: unknown
-  upi?: string
+  upi?: string | null
   parcelCode?: string
   address?: string
   district?: string
