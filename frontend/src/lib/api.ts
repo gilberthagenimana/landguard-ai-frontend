@@ -119,6 +119,9 @@ export const api = {
   myUnreadNotificationCount: () => request<{ unread_count: number }>('/api/notifications/me/unread-count'),
   markMyNotificationRead: (id: number) => request<NotificationRecord>(`/api/notifications/me/${id}/read`, { method: 'POST' }),
   markMyNotificationsRead: () => request<{ unread_count: number; updated: number }>('/api/notifications/me/read-all', { method: 'POST' }),
+  getMyNotificationPreferences: () => request<NotificationPreferences>('/api/notifications/me/preferences'),
+  updateMyNotificationPreferences: (payload: NotificationPreferencesPayload) =>
+    request<NotificationPreferences>('/api/notifications/me/preferences', { method: 'PUT', body: JSON.stringify(payload) }),
   report: (name: string) => request<Record<string, unknown>>(`/api/reports/${name}`),
   publicParcelCheck: (upi: string) => request<PublicParcelOut>(`/api/public/parcels/${upi}`),
   publicParcelByCode: (parcelCode: string) => request<PublicParcelOut>(`/api/public/parcels/by-code/${encodeURIComponent(parcelCode)}`),
@@ -186,6 +189,16 @@ export type NotificationRecord = {
   created_at: string
   read_at?: string | null
 }
+
+export type NotificationFrequency = 'instant' | 'daily' | 'weekly'
+export type NotificationPreferences = {
+  user_id: number
+  email_enabled: boolean
+  sms_enabled: boolean
+  in_app_enabled: boolean
+  frequency: NotificationFrequency
+}
+export type NotificationPreferencesPayload = Omit<NotificationPreferences, 'user_id'>
 
 export type ParcelCreatePayload = {
   upi: string

@@ -1,5 +1,5 @@
 import TransactionReviewCenter from './components/TransactionReviewCenter'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   AlertTriangle, ArrowRight, Bell, Check, CheckCircle, ChevronDown,
@@ -12,7 +12,7 @@ import {
 import {
   api, type AuthSession, type AuditRecord, type CaseDetail, type CaseRecord, type CurrentUser,
   type DashboardStats, type DatabaseHealth, type FileStoragePolicy, type OwnerRecord, type OwnershipRecord, type ParcelRecord,
-  type NotificationRecord, type RiskResponse, type Setting, type TransactionRecord, type UserRecord,
+  type NotificationRecord, type NotificationFrequency, type RiskResponse, type Setting, type TransactionRecord, type UserRecord,
   type VerificationResponse, type VerificationResult,
 } from './lib/api'
 import PublicUpiCheck from './components/PublicUpiCheck'
@@ -2174,7 +2174,12 @@ function ProfilePage({ currentUser, onLogout, onUpdateUser }: { currentUser: Cur
   const [emailNotifs, setEmailNotifs] = useState(true)
   const [smsNotifs, setSmsNotifs] = useState(true)
   const [systemAlerts, setSystemAlerts] = useState(true)
-  const [frequency, setFrequency] = useState('Instant')
+  const [frequency, setFrequency] = useState<NotificationFrequency>('instant')
+  const [loadingPreferences, setLoadingPreferences] = useState(false)
+  const [savingPreferences, setSavingPreferences] = useState(false)
+  const [preferencesMessage, setPreferencesMessage] = useState('')
+  const mountedRef = useRef(false)
+  const profileUserIdRef = useRef<number | null>(currentUser?.id ?? null)
   const [pwOpen, setPwOpen] = useState(false)
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -2184,6 +2189,46 @@ function ProfilePage({ currentUser, onLogout, onUpdateUser }: { currentUser: Cur
   const [sessions, setSessions] = useState<AuthSession[] | null>(null)
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [sessionsError, setSessionsError] = useState('')
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    profileUserIdRef.current = currentUser?.id ?? null
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    const userId = currentUser?.id
+    if (!userId) {
+      setLoadingPreferences(false)
+      return
+    }
+
+    let cancelled = false
+    setLoadingPreferences(true)
+    setSavingPreferences(false)
+    setPreferencesMessage('')
+
+    api.getMyNotificationPreferences()
+      .then((preferences) => {
+        if (cancelled || !mountedRef.current || profileUserIdRef.current !== userId) return
+        setEmailNotifs(preferences.email_enabled)
+        setSmsNotifs(preferences.sms_enabled)
+        setSystemAlerts(preferences.in_app_enabled)
+        setFrequency(preferences.frequency)
+      })
+      .catch((error) => {
+        if (cancelled || !mountedRef.current || profileUserIdRef.current !== userId) return
+        setPreferencesMessage(error instanceof Error ? `Could not load contact preferences: ${error.message}` : 'Could not load contact preferences.')
+      })
+      .finally(() => {
+        if (!cancelled && mountedRef.current && profileUserIdRef.current === userId) setLoadingPreferences(false)
+      })
+
+    return () => { cancelled = true }
+  }, [currentUser?.id])
 
   const loadSessions = async () => {
     setLoadingSessions(true)
@@ -2202,6 +2247,32 @@ function ProfilePage({ currentUser, onLogout, onUpdateUser }: { currentUser: Cur
       if (onUpdateUser && currentUser) onUpdateUser({ ...currentUser, full_name: fullNameDraft.trim() })
     } catch { setProfileMessage('Profile update failed. Please try again.') }
     finally { setSavingProfile(false) }
+  }
+
+  const savePreferences = async () => {
+    const userId = currentUser?.id
+    if (!userId) return
+    setSavingPreferences(true)
+    setPreferencesMessage('')
+    try {
+      const preferences = await api.updateMyNotificationPreferences({
+        email_enabled: emailNotifs,
+        sms_enabled: smsNotifs,
+        in_app_enabled: systemAlerts,
+        frequency,
+      })
+      if (!mountedRef.current || profileUserIdRef.current !== userId) return
+      setEmailNotifs(preferences.email_enabled)
+      setSmsNotifs(preferences.sms_enabled)
+      setSystemAlerts(preferences.in_app_enabled)
+      setFrequency(preferences.frequency)
+      setPreferencesMessage('Contact preferences saved.')
+    } catch (error) {
+      if (!mountedRef.current || profileUserIdRef.current !== userId) return
+      setPreferencesMessage(error instanceof Error ? `Could not save contact preferences: ${error.message}` : 'Could not save contact preferences.')
+    } finally {
+      if (mountedRef.current && profileUserIdRef.current === userId) setSavingPreferences(false)
+    }
   }
 
   const submitPassword = async (event: FormEvent) => {
@@ -2241,7 +2312,20 @@ function ProfilePage({ currentUser, onLogout, onUpdateUser }: { currentUser: Cur
         ) : null}
         <div className="profile-contact-row"><div><span>Email</span><strong>{currentUser?.email ?? '—'}</strong></div><div><span>Phone</span><strong>—</strong></div><div><span>Joined</span><strong>—</strong></div></div>
       </section>
-      <section className="profile-preferences-card"><div className="profile-section-heading"><h3>Contact Preferences</h3></div><div className="profile-preferences-grid"><div className="profile-toggle-list"><div className="profile-toggle-row"><span>✉ Email Notifications</span><button aria-label="Toggle email notifications" className={`toggle ${emailNotifs ? 'toggle--on' : ''}`} onClick={() => setEmailNotifs(!emailNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>▣ SMS Notifications</span><button aria-label="Toggle SMS notifications" className={`toggle ${smsNotifs ? 'toggle--on' : ''}`} onClick={() => setSmsNotifs(!smsNotifs)}><span className="toggle-dot" /></button></div><div className="profile-toggle-row"><span>♟ System Alerts</span><button aria-label="Toggle system alerts" className={`toggle ${systemAlerts ? 'toggle--on' : ''}`} onClick={() => setSystemAlerts(!systemAlerts)}><span className="toggle-dot" /></button></div></div><label className="frequency-control">Notification Frequency<select value={frequency} onChange={(e) => setFrequency(e.target.value)}><option>Instant</option><option>Daily digest</option><option>Weekly digest</option></select></label></div></section>
+      <section className="profile-preferences-card">
+        <div className="profile-section-heading"><h3>Contact Preferences</h3></div>
+        {loadingPreferences && <div className="text-muted">Loading your contact preferences...</div>}
+        {preferencesMessage && <div className={`alert ${preferencesMessage.toLowerCase().includes('could not') ? 'alert--error' : 'alert--success'}`}>{preferencesMessage}</div>}
+        <div className="profile-preferences-grid">
+          <div className="profile-toggle-list">
+            <div className="profile-toggle-row"><span>✉ Email Notifications</span><button type="button" aria-label="Toggle email notifications" aria-pressed={emailNotifs} className={`toggle ${emailNotifs ? 'toggle--on' : ''}`} disabled={loadingPreferences || savingPreferences} onClick={() => setEmailNotifs(!emailNotifs)}><span className="toggle-dot" /></button></div>
+            <div className="profile-toggle-row"><span>▣ SMS Notifications</span><button type="button" aria-label="Toggle SMS notifications" aria-pressed={smsNotifs} className={`toggle ${smsNotifs ? 'toggle--on' : ''}`} disabled={loadingPreferences || savingPreferences} onClick={() => setSmsNotifs(!smsNotifs)}><span className="toggle-dot" /></button></div>
+            <div className="profile-toggle-row"><span>♟ System Alerts</span><button type="button" aria-label="Toggle system alerts" aria-pressed={systemAlerts} className={`toggle ${systemAlerts ? 'toggle--on' : ''}`} disabled={loadingPreferences || savingPreferences} onClick={() => setSystemAlerts(!systemAlerts)}><span className="toggle-dot" /></button></div>
+          </div>
+          <label className="frequency-control">Notification Frequency<select value={frequency} disabled={loadingPreferences || savingPreferences} onChange={(e) => setFrequency(e.target.value as NotificationFrequency)}><option value="instant">Instant</option><option value="daily">Daily digest</option><option value="weekly">Weekly digest</option></select></label>
+        </div>
+        <div className="profile-edit-actions"><button className="btn-primary" type="button" onClick={savePreferences} disabled={loadingPreferences || savingPreferences || !currentUser}>{savingPreferences ? 'Saving Preferences...' : 'Save Preferences'}</button></div>
+      </section>
       <div className="profile-security-grid"><section className="profile-security-card"><div className="security-icon">♙</div><div><h3>Change Password</h3><p>Update your password regularly to keep your account secure.</p>{!pwOpen ? (<button className="btn-outline" onClick={() => { setPwOpen(true); setPwMessage(''); }}>Change Password</button>) : (<form onSubmit={submitPassword}><div className="form-group"><label className="form-label" htmlFor="current-password">Current Password</label><input id="current-password" className="form-input" type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} /></div><div className="form-group"><label className="form-label" htmlFor="new-password">New Password</label><input id="new-password" className="form-input" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} /></div><div className="form-group"><label className="form-label" htmlFor="confirm-password">Confirm New Password</label><input id="confirm-password" className="form-input" type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} /></div>{pwMessage && <div className={`alert ${pwMessage.toLowerCase().includes('fail') ? 'alert--error' : 'alert--success'}`}>{pwMessage}</div>}<div className="profile-edit-actions"><button className="btn-primary" type="submit" disabled={savingPw}>Update Password</button><button className="btn-secondary" type="button" onClick={() => { setPwOpen(false); setPwMessage(''); setCurrentPw(''); setNewPw(''); setConfirmPw('') }}>Cancel</button></div></form>)}</div></section><section className="profile-security-card"><div className="security-icon">♢</div><div><h3>Security & Sessions</h3><p>Active Sessions<br /><strong>{loadingSessions ? 'Checking...' : String(activeSessions.length)}</strong></p>{loadingSessions && <p className="text-muted">Loading your active sessions...</p>}{sessionsError && <div className="alert alert--error">{sessionsError}</div>}{sessions === null && !loadingSessions && (<button className="btn-outline" onClick={loadSessions}>View Sessions</button>)}{sessions !== null && sessions.length > 0 && (<div className="session-list">{sessions.filter((item) => !item.revoked).map((item) => (<div className="session-item" key={item.id}><div><strong>{item.user_agent ?? 'Unknown device'}</strong><span className="text-muted">{item.ip_address ?? '—'}</span></div><div><span>Expires</span><strong>{new Date(item.expires_at).toLocaleString()}</strong></div></div>))}</div>)}</div></section></div>
     </div>
   )
